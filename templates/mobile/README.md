@@ -10,7 +10,7 @@ to open the app.
 ```sh
 pnpm install
 cp .env.example .env        # EXPO_PUBLIC_API_URL points at the API
-pnpm start
+pnpm dev
 ```
 
 On an Android emulator `localhost` is the emulator itself; point `EXPO_PUBLIC_API_URL` at your machine's address.

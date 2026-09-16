@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --port 3200",
     "build": "next build",
-    "start": "next start",
+    "start": "next start --port 3200",
     "lint": "biome check",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",

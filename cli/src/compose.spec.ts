@@ -28,6 +28,16 @@ describe('composeWorkspace', () => {
     expect(biome).toMatch(/\/\/ Nest decorates constructor and handler parameters.*\n\s*"parser"/)
   })
 
+  it('gives the root one command for every app and one per app it holds', async () => {
+    const { scripts } = JSON.parse(await readFile(join(target, 'package.json'), 'utf8'))
+
+    expect(scripts.dev).toBe('pnpm -r --parallel dev')
+    expect(scripts.api).toBe('pnpm --filter api dev')
+    expect(scripts.web).toBe('pnpm --filter web dev')
+    expect(scripts.mobile).toBeUndefined()
+    expect(scripts.site).toBeUndefined()
+  })
+
   it('moves the contract into a package and points every import at it', async () => {
     const form = await readFile(
       join(target, 'apps/web/src/features/profile/profile-form.tsx'),
@@ -157,5 +167,15 @@ describe('copyTemplate from a published package', () => {
     expect(existsSync(join(root, 'out/gitignore'))).toBe(false)
 
     await rm(root, { recursive: true, force: true })
+  })
+})
+
+describe('every template', () => {
+  it('answers to dev, which is all the root scripts call', async () => {
+    for (const type of ['api', 'web', 'mobile', 'site']) {
+      const { scripts } = JSON.parse(await readFile(join(templates, type, 'package.json'), 'utf8'))
+
+      expect(scripts.dev, `${type} has no dev script`).toBeTypeOf('string')
+    }
   })
 })

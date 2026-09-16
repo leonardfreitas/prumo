@@ -307,6 +307,14 @@ export async function composeWorkspace({
     })
   }
 
+  // One command for everything and one per app. Each app answers to `dev`, so the root never needs to know how.
+  await rewriteText(join(target, 'package.json'), (text) =>
+    types.reduce(
+      (pkg, type) => setJsonc(pkg, ['scripts', type], `pnpm --filter ${type} dev`),
+      setJsonc(text, ['scripts', 'dev'], 'pnpm -r --parallel dev'),
+    ),
+  )
+
   const manifests = await Promise.all(
     apps.map(async (app) =>
       readJsonc<PackageJson>(await readFile(join(app, 'package.json'), 'utf8')),

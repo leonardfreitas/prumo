@@ -16,7 +16,8 @@ Node 22.17 or later, pnpm, and Docker for the API.
 | Command | What it does |
 |---|---|
 | `pnpm install` | Installs every app and package |
-| `pnpm --filter <app> dev` | Starts one app. There is no root `dev` on purpose |
+| `pnpm dev` | Starts every app at once, their output prefixed by app. Mobile runs without its QR code there; use `pnpm mobile` for that |
+| `pnpm api` · `pnpm web` · `pnpm mobile` · `pnpm site` | Starts one app; the workspace has a script for each app it holds |
 | `pnpm lint` · `pnpm typecheck` · `pnpm test` | Runs across every app and package |
 
 ## Conventions

@@ -11,7 +11,7 @@ pnpm install
 cp .env.example .env        # then replace BETTER_AUTH_SECRET with 32 or more random characters
 docker compose up -d --wait
 pnpm db:migrate
-pnpm start:dev
+pnpm dev
 ```
 
 The API listens on `http://localhost:3000`. Outside production, its documentation is at `/api/docs`.

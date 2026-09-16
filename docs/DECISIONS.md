@@ -8610,3 +8610,43 @@ the five generated projects, including the four type workspace.
 anyone opened a result. The weekly schedule and the push trigger were live the whole time, failing silently.
 
 **Affects:** `.github/workflows/ci.yml`, `cli/package.json`
+
+---
+
+## 2026-09-17: `pnpm dev` starts every app, and `pnpm <app>` starts one
+
+**Decision:** a generated workspace's root carries `dev`, running `pnpm -r --parallel dev`, and one script per app
+it holds, named after the app and running `pnpm --filter <app> dev`. Every template answers to `dev`: the API and
+mobile keep their framework's own script and alias it. The site moves to port 3200.
+
+**This reverses the entry of 2026-09-14**, which refused a root `dev` because someone typing it expecting their
+own app would start four processes. The user asked for both commands, and the argument loses its force once
+`pnpm web` exists beside `pnpm dev`: the one-app command is as short as the all-apps one, so starting everything
+becomes a choice rather than an accident.
+
+**Options considered:**
+- A) `pnpm dev` for every app, plus one script per app.
+- B) Only the per-app scripts.
+- C) `pnpm dev` for the servers, mobile only through its own script.
+
+**Verified by running it, not by reading it.** A four-type workspace was generated, its database started and
+migrated, and `pnpm dev` run: within six seconds the API answered its health check on 3000, web on 5173, the site
+on 3200 and Metro on 8081. `pnpm web` alone started web and left the API down.
+
+**What A costs, measured under a pseudo terminal:** `pnpm mobile` draws the QR code, prints the `exp://` URL and
+lists the keyboard shortcuts. Under `pnpm dev` none of the three appear, because Expo no longer owns the terminal.
+Metro still serves, so an open simulator connects. The documented path is `pnpm mobile` in a terminal of its own.
+If that proves a nuisance, C is the fallback.
+
+**A collision that already existed:** `next dev` defaults to 3000, which the API holds, so a workspace with both
+could never run them together, `pnpm dev` or not. Verified in Next's own `--help`.
+
+**Found on the way, and fixed:** the CLI picked its templates by probing `cli/templates` before the repository's
+`templates/`. After any build, running the CLI from source silently generated from the stale build copy. The
+first run of this check generated a site on port 3000 with no API and no mobile in `pnpm dev`, which is how it
+surfaced. `docs/maintaining-templates.md` tells maintainers to verify a change exactly that way, so every such
+verification after a build was checking yesterday's templates. Assets are now resolved by where the CLI runs
+from, `src` or `dist`, and two tests fail if the origins are swapped.
+
+**Affects:** `templates/*/package.json`, `templates/*/README.md`, `cli/src/compose.ts`, `cli/src/assets.ts`,
+`cli/src/cli.ts`, `cli/scripts/verify.mjs`, `monorepo/tasks.md`

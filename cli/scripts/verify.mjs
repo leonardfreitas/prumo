@@ -188,19 +188,12 @@ async function verifySite() {
   }
 
   await step('site: start serves its metadata', () =>
-    withServer(
-      'pnpm',
-      ['start', '-p', String(sitePort)],
-      site,
-      `http://localhost:${sitePort}/`,
-      {},
-      async () => {
-        const html = await (await fetch(`http://localhost:${sitePort}/`)).text()
-        if (!/<title>/.test(html) || !/<meta name="description"/.test(html)) {
-          throw new Error('the served HTML carries no title or description')
-        }
-      },
-    ),
+    withServer('pnpm', ['start'], site, `http://localhost:${sitePort}/`, {}, async () => {
+      const html = await (await fetch(`http://localhost:${sitePort}/`)).text()
+      if (!/<title>/.test(html) || !/<meta name="description"/.test(html)) {
+        throw new Error('the served HTML carries no title or description')
+      }
+    }),
   )
 }
 

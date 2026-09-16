@@ -1,25 +1,15 @@
 #!/usr/bin/env node
-import { existsSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import * as prompt from '@clack/prompts'
 import { terminalAsker } from './asker.ts'
+import { assetsFor, requireAssets } from './assets.ts'
 import { generate } from './generate.ts'
 import { validateProjectName } from './names.ts'
 import { resolveAnswers } from './questions.ts'
 
 const USAGE = `Usage: prumo new [name] [--types api,web,mobile,site] [--alone | --monorepo]
                   [--multi-tenant | --single-tenant] [--skip-install]`
-
-function firstExisting(...candidates: string[]): string {
-  const found = candidates.find((candidate) => existsSync(candidate))
-
-  if (found === undefined) {
-    throw new Error(`Cannot find ${candidates.join(' or ')}`)
-  }
-
-  return found
-}
 
 async function main(): Promise<void> {
   const { values, positionals } = parseArgs({
@@ -64,11 +54,7 @@ async function main(): Promise<void> {
   const here = import.meta.dirname
 
   await generate({
-    templates: firstExisting(join(here, '../templates'), join(here, '../../templates')),
-    knowledge: firstExisting(
-      join(here, '../.prumo-templates'),
-      join(here, '../../.prumo-templates'),
-    ),
+    ...requireAssets(assetsFor(here)),
     target: resolve(answers.name),
     answers,
     install: !values['skip-install'],
