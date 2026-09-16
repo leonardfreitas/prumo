@@ -14,6 +14,10 @@ pnpm dev
 
 The app runs on `http://localhost:5173`, which is the origin the API trusts by default (`WEB_ORIGIN`).
 
+Open it and you are sent to sign in, because everything but the sign-in and sign-up pages needs a session. Follow
+**Sign up** to create an account; you land on your profile, which you can edit. The API must be running and
+migrated first, or the session check has nothing to answer it.
+
 ## Everyday commands
 
 | Command | What it does |

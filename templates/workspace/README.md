@@ -20,6 +20,12 @@ Node 22.17 or later, pnpm, and Docker for the API.
 | `pnpm api` · `pnpm web` · `pnpm mobile` · `pnpm site` | Starts one app; the workspace has a script for each app it holds |
 | `pnpm lint` · `pnpm typecheck` · `pnpm test` | Runs across every app and package |
 
+## Trying it
+
+With the API migrated, run `pnpm dev`. If the workspace holds `web`, open `http://localhost:5173`: you are sent to
+sign in, and **Sign up** creates an account and takes you to your profile. Each app's README says what it needs
+before it starts.
+
 ## Conventions
 
 The rules this project follows live in `.prumo/`, and `AGENTS.md` points to them. Read those before

@@ -8650,3 +8650,37 @@ from, `src` or `dist`, and two tests fail if the origins are swapped.
 
 **Affects:** `templates/*/package.json`, `templates/*/README.md`, `cli/src/compose.ts`, `cli/src/assets.ts`,
 `cli/src/cli.ts`, `cli/scripts/verify.mjs`, `monorepo/tasks.md`
+
+---
+
+## 2026-09-17: The web template's sign-in never reached the app in a browser
+
+**Found because the user could not find where to see the flow.** Walking it in headless Chrome showed the defect:
+opening `/` sent the visitor to sign in, signing up and signing in both succeeded, the database held the user and
+two sessions, the API set its `HttpOnly; SameSite=Lax` cookie with credentials allowed, and the visitor was sent
+straight back to sign in every time.
+
+**Cause, read in the installed `@tanstack/query-core` 5.102.8 rather than recalled:** the protected route reads
+the session with `ensureQueryData`, which fetches only when the cache is empty. A visitor without a session
+leaves `null` there, and `null` is not empty. The forms then called `invalidateQueries`, which marks the query
+stale and refetches only queries something observes. Nothing observes the session on web, so the route kept
+reading the cached `null`.
+
+**Fix:** both forms call `refetchQueries` instead, which by default includes queries nothing observes and waits
+for the new session before navigating.
+
+**Why mobile is not affected:** its root layout keeps `useQuery(sessionQuery)` mounted for the life of the app,
+so the same `invalidateQueries` finds an active observer and refetches. That correctness is incidental to the
+layout, not stated anywhere.
+
+**Why nothing caught it:** CI checks the API through `fetch`, and the web tests rendered forms against a fake
+transport without a session ever being cached first. Two router level tests now walk the journeys a visitor
+takes, starting from `/`. The first version of the sign-up test started at `/sign-up` and passed with the defect
+restored, because only a protected route caches the `null`; it was rewritten and now fails when either form is
+reverted.
+
+**Verified in the browser after the fix:** sign-up lands on the profile, clearing cookies returns to sign in, and
+signing in lands on the profile again.
+
+**Affects:** `templates/web/src/features/auth/`, `templates/web/src/app.spec.tsx`, `templates/web/README.md`,
+`templates/workspace/README.md`

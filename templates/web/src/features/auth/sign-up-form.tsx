@@ -39,7 +39,9 @@ export function SignUpForm({ auth }: { auth: AuthClient }) {
       return
     }
 
-    await queryClient.invalidateQueries({ queryKey: sessionQuery(auth).queryKey })
+    // Invalidating is not enough: nothing observes the session, and the protected route's ensureQueryData
+    // would keep returning the cached null. Refetching replaces it before the route reads it.
+    await queryClient.refetchQueries({ queryKey: sessionQuery(auth).queryKey })
     await navigate({ to: '/' })
   }
 
