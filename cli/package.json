@@ -23,6 +23,7 @@
   "license": "MIT",
   "author": "Leonardo Freitas",
   "type": "module",
+  "packageManager": "pnpm@12.3.4",
   "bin": {
     "prumo": "dist/cli.js"
   },
