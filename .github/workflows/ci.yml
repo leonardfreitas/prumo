@@ -101,7 +101,7 @@ jobs:
       - run: pnpm install
         working-directory: cli
       - name: Generate ${{ matrix.name }}
-        run: node ../cli/src/cli.ts new ${{ matrix.name }} --types ${{ matrix.types }} --single-tenant
+        run: node ${{ github.workspace }}/cli/src/cli.ts new ${{ matrix.name }} --types ${{ matrix.types }} --single-tenant
         working-directory: ${{ runner.temp }}
       - name: Verify ${{ matrix.name }}
         run: >
