@@ -8562,3 +8562,28 @@ the commits back so that GitHub would not describe a release that did not exist 
 `LICENSE` and the images the README points at. The right split was to push the files and hold only the sentence.
 
 **Affects:** `cli/package.json`, `README.md`
+
+---
+
+## 2026-09-16: Correction, `0.0.1` was published all along
+
+**Correcting the entry above.** `0.0.1` was never unpublished. The first `npm publish --access public` succeeded,
+and the registry took minutes to serve the new document, so `npm view` and a direct fetch both answered 404 while
+the package existed. I read that pair of signals as an unpublish, recommended abandoning the version number, and
+the repository was moved to `0.0.2` on that reasoning. It is moved back: the manifest and the README say `0.0.1`,
+which is what the registry serves.
+
+**What the three signals actually meant:** `npm access list packages` showed the package because it existed.
+`npm publish` refused because the version existed. The 404 was propagation, and it was the only one of the three
+that pointed at an unpublish. I weighed the single lagging signal over the two live ones.
+
+**The rule this breaks is the repository's own:** verify, do not recall. I had a way to distinguish the two
+explanations and did not take it. An unpublished package answers `npm view` with a 404 **and** keeps serving a
+`time.unpublished` record, and waiting a few minutes and asking again would have settled it outright. Diagnosing
+from a first answer is the same failure as asserting a version from memory.
+
+**Verified now, from the registry rather than from the working tree:** `npx -y @stjoseph/prumo@0.0.1 new
+--types api,web` installs from npm and writes a workspace with `apps/`, `packages/`, `.prumo/` holding six areas,
+and a `.gitignore`.
+
+**Affects:** `cli/package.json`, `README.md`, the entry above

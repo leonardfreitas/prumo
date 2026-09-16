@@ -36,8 +36,13 @@ Node 22.17 or later, pnpm, and Docker for anything with an API.
 ## Running it
 
 ```sh
-pnpm dlx @stjoseph/prumo new my-app
+npx @stjoseph/prumo new my-app        # npm
+pnpm dlx @stjoseph/prumo new my-app   # pnpm
 ```
+
+Either runner starts it, and the generated project installs with pnpm, which it needs anyway. The
+published package is [`@stjoseph/prumo`](https://www.npmjs.com/package/@stjoseph/prumo), and the
+command it installs is `prumo`.
 
 It asks what to build, writes the project into `my-app/`, runs `git init`, and installs. Nothing is
 committed, so the first commit is yours and the diff shows everything Prumo wrote.
@@ -47,7 +52,7 @@ terminal a missing answer is an error rather than a default, so nothing importan
 silence:
 
 ```sh
-pnpm dlx @stjoseph/prumo new my-app --types api,web --single-tenant
+npx @stjoseph/prumo new my-app --types api,web --single-tenant
 ```
 
 | Flag | What it answers |
@@ -102,7 +107,7 @@ Once written, those documents belong to the team. Prumo does not come back and r
 
 ## Status
 
-Prumo is in beta. `0.0.2` is the first published version: every template runs and every generated
+Prumo is in beta. `0.0.1` is the first published version: every template runs and every generated
 project is verified in CI, and what a generated project looks like can still change before 1.0.
 What is known to be missing is listed in [`docs/OPEN-QUESTIONS.md`](https://github.com/stjosephworks/prumo/blob/main/docs/OPEN-QUESTIONS.md), and
 `prumo new` is the only command. Updating a project's `.prumo/` in place comes after 1.0.
