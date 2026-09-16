@@ -8587,3 +8587,26 @@ from a first answer is the same failure as asserting a version from memory.
 and a `.gitignore`.
 
 **Affects:** `cli/package.json`, `README.md`, the entry above
+
+---
+
+## 2026-09-16: CI passes for the first time
+
+**What happened:** the workflow written in phase 7 had never passed. It was verified by reading, and every run since
+the first push failed at its first step. Three defects, each hidden behind the one before it:
+
+1. `pnpm/action-setup` needs a pnpm version and found none. `packageManager: pnpm@12.3.4` was added to
+   `cli/package.json`, which alone did not help.
+2. The action reads `package.json` from the repository root by default, and the root carries no manifest by
+   design. Each setup step now names `package_json_file: cli/package.json`. The log had said where it looked, in
+   the line `package_json_file: package.json`; the fix followed the error's suggestion instead of its diagnosis.
+3. The generate step ran in `runner.temp` and called `node ../cli/src/cli.ts`, assuming the temporary directory
+   sat beside the checkout. It does not. The CLI is now addressed through `github.workspace`.
+
+**Verified:** run 35129344444 on `052528e` passed all seven jobs: the CLI's own suite, the packaged install, and
+the five generated projects, including the four type workspace.
+
+**What it costs to have learned this late:** "the CI exists" was reported as "the CI runs" more than once before
+anyone opened a result. The weekly schedule and the push trigger were live the whole time, failing silently.
+
+**Affects:** `.github/workflows/ci.yml`, `cli/package.json`
