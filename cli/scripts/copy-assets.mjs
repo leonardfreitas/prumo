@@ -47,5 +47,7 @@ for (const source of ['templates', '.prumo-templates']) {
   assertNothingStripped(join(here, source))
 }
 
-// npm reads the README from the package root, and two of them would diverge unseen.
-cpSync(join(repository, 'README.md'), join(here, 'README.md'))
+// npm reads both of these from the package root, and a second copy of either would diverge unseen.
+for (const file of ['README.md', 'LICENSE']) {
+  cpSync(join(repository, file), join(here, file))
+}

@@ -1,4 +1,11 @@
-# Prumo
+<p align="center">
+  <img src="https://raw.githubusercontent.com/leonardfreitas/prumo/main/docs/brand/brand.png" alt="Prumo" width="300">
+</p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/prumo"><img src="https://img.shields.io/npm/v/prumo?color=1e3a5f&label=npm" alt="npm"></a>
+  <a href="https://github.com/leonardfreitas/prumo/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/prumo?color=1e3a5f" alt="MIT"></a>
+</p>
 
 Prumo is a set of choices a team has already made, packaged so that starting a new TypeScript
 project does not mean making them all over again. Which framework, how a module is laid out, where
@@ -28,12 +35,8 @@ Node 22.17 or later, pnpm, and Docker for anything with an API.
 
 ## Running it
 
-Prumo is not on npm yet. Until it is, run it from a clone:
-
 ```sh
-git clone https://github.com/leonardfreitas/prumo
-pnpm install --dir prumo/cli
-node prumo/cli/src/cli.ts new my-app
+pnpm dlx prumo new my-app
 ```
 
 It asks what to build, writes the project into `my-app/`, runs `git init`, and installs. Nothing is
@@ -44,7 +47,7 @@ terminal a missing answer is an error rather than a default, so nothing importan
 silence:
 
 ```sh
-node prumo/cli/src/cli.ts new my-app --types api,web --single-tenant
+pnpm dlx prumo new my-app --types api,web --single-tenant
 ```
 
 | Flag | What it answers |
@@ -92,7 +95,16 @@ Once written, those documents belong to the team. Prumo does not come back and r
 
 | Document | Holds |
 |---|---|
-| [`docs/stack.md`](docs/stack.md) | What is locked, what was deliberately dropped, and the version floors |
-| [`docs/structure.md`](docs/structure.md) | The `.prumo/` layout, and the rule deciding which areas a project receives |
-| [`docs/DECISIONS.md`](docs/DECISIONS.md) | Every decision, why it won, and what it costs |
-| [`docs/OPEN-QUESTIONS.md`](docs/OPEN-QUESTIONS.md) | What has been raised and is still unresolved |
+| [`docs/stack.md`](https://github.com/leonardfreitas/prumo/blob/main/docs/stack.md) | What is locked, what was deliberately dropped, and the version floors |
+| [`docs/structure.md`](https://github.com/leonardfreitas/prumo/blob/main/docs/structure.md) | The `.prumo/` layout, and the rule deciding which areas a project receives |
+| [`docs/DECISIONS.md`](https://github.com/leonardfreitas/prumo/blob/main/docs/DECISIONS.md) | Every decision, why it won, and what it costs |
+| [`docs/OPEN-QUESTIONS.md`](https://github.com/leonardfreitas/prumo/blob/main/docs/OPEN-QUESTIONS.md) | What has been raised and is still unresolved |
+
+## Status
+
+Prumo is in beta. `0.0.1` is the first published version: every template runs and every generated
+project is verified in CI, and what a generated project looks like can still change before 1.0.
+What is known to be missing is listed in [`docs/OPEN-QUESTIONS.md`](https://github.com/leonardfreitas/prumo/blob/main/docs/OPEN-QUESTIONS.md), and
+`prumo new` is the only command. Updating a project's `.prumo/` in place comes after 1.0.
+
+MIT licensed. See [`LICENSE`](https://github.com/leonardfreitas/prumo/blob/main/LICENSE).

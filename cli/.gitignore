@@ -3,4 +3,5 @@ dist
 templates
 .prumo-templates
 README.md
+LICENSE
 *.tgz

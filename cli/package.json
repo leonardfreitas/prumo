@@ -1,7 +1,27 @@
 {
   "name": "prumo",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.0.1",
+  "description": "Scaffolds a TypeScript project and ships it the conventions it follows, in a .prumo/ folder any AI assistant reads.",
+  "keywords": [
+    "scaffolding",
+    "cli",
+    "typescript",
+    "nestjs",
+    "expo",
+    "monorepo",
+    "conventions",
+    "agents",
+    "ai"
+  ],
+  "homepage": "https://github.com/leonardfreitas/prumo#readme",
+  "bugs": "https://github.com/leonardfreitas/prumo/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/leonardfreitas/prumo.git",
+    "directory": "cli"
+  },
+  "license": "MIT",
+  "author": "Leonardo Freitas",
   "type": "module",
   "bin": {
     "prumo": "dist/cli.js"
@@ -16,7 +36,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --dir src",
     "prumo": "node src/cli.ts",
-    "build": "tsc -p tsconfig.build.json && node scripts/copy-assets.mjs"
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-assets.mjs",
+    "prepack": "pnpm build"
   },
   "dependencies": {
     "@clack/prompts": "1.8.1",

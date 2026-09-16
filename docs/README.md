@@ -1,3 +1,5 @@
+<img src="https://raw.githubusercontent.com/leonardfreitas/prumo/main/docs/brand/icon.png" alt="" width="28" align="left">
+
 # Prumo's own documents
 
 These describe **how Prumo is built**. None of them ships to a generated project. What ships is the

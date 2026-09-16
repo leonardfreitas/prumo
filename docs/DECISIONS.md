@@ -8438,3 +8438,66 @@ recreating the repository would be an actual erasure.
 
 **Affects:** the repository's history, the `v0-hexagonal-fastify` tag, the pointer at the top of this file,
 `docs/README.md`, and the 2026-09-15 entry that promised the tag
+
+---
+
+## 2026-09-16: MIT, with the licence shipped inside the package
+
+**Decision:** the project is MIT licensed. `LICENSE` sits at the repository root, `cli/package.json` declares
+`"license": "MIT"`, and the build copies the file into the package, because npm includes only the one at the
+package root and that root is `cli/`.
+
+**Options considered:** A) MIT. B) Apache 2.0. C) no licence.
+
+**Reasoning:** A. MIT is what someone installing a scaffolding tool from npm expects, and what Prumo hands over
+is conventions and skeletons the user edits anyway. **C was not neutral:** a public repository with no licence is
+all rights reserved, so nobody could legally use it. Apache 2.0's patent grant buys little for a code generator
+and costs the longer text.
+
+**What A costs:** anyone may take Prumo, rename it and sell it, returning nothing.
+
+**Affects:** `LICENSE`, `cli/package.json`, `cli/scripts/copy-assets.mjs`, `cli/.gitignore`
+
+---
+
+## 2026-09-16: Beta means `0.0.1` on the default tag, not a prerelease
+
+**Decision:** the first published version is `0.0.1`, published normally so npm's `latest` points at it. The
+README says in plain words that it is beta.
+
+**Options considered:**
+- A) `0.0.1` on `latest`, beta stated in the README.
+- B) `0.0.1` published with `--tag beta`.
+- C) `0.0.1-beta.0` with the `beta` tag.
+
+**Reasoning:** A. B and C exist to test a next version beside a stable one, and there is no stable one. With
+nothing on `latest`, `pnpm dlx prumo new my-app` fails with no matching version, and that is the first command a
+visitor copies from the README.
+
+**What A costs:** a plain `pnpm dlx prumo` installs beta software without the tag warning anyone. The `0.0.x`
+number and the README's Status section are what carry the warning instead.
+
+**Affects:** `cli/package.json`, `README.md`
+
+---
+
+## 2026-09-16: The brand images, and every README link, are absolute
+
+**Decision:** `brand.png` and `icon.png` live in `docs/brand/`. The README references the wordmark, and every
+link in it, by absolute `github.com` and `raw.githubusercontent.com` URL. The documents index carries the icon.
+
+**Reasoning:** the same README is the GitHub front page and the npm page. Relative paths always work on GitHub
+and are unverified on npm: npm's own documentation says only that the file is rendered through GitHub's API, and
+says nothing about how a relative path resolves. Absolute URLs cannot fail in either place. The rule was extended
+from images to links for the same reason, since a broken link on the npm page is the same defect.
+
+**What it costs:** the repository's address is written inside the README, so renaming or moving the repository
+breaks the images and the links until the text is edited.
+
+**Prepared alongside it, and verified by packing:** `private: true` removed, `description`, `keywords`,
+`repository`, `homepage`, `bugs` and `author` filled in, and a `prepack` script that runs the build. The last one
+is the guard: publishing without building would ship no `dist`, no templates and no knowledge base. Proved by
+deleting all three and packing, which rebuilt them, then installing the real tarball and generating a project
+that carried `.prumo/`, `AGENTS.md` and `.gitignore`.
+
+**Affects:** `docs/brand/`, `README.md`, `docs/README.md`, `cli/package.json`
