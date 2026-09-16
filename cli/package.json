@@ -1,5 +1,5 @@
 {
-  "name": "prumo",
+  "name": "@stjoseph/prumo",
   "version": "0.0.1",
   "description": "Scaffolds a TypeScript project and ships it the conventions it follows, in a .prumo/ folder any AI assistant reads.",
   "keywords": [
@@ -13,11 +13,11 @@
     "agents",
     "ai"
   ],
-  "homepage": "https://github.com/leonardfreitas/prumo#readme",
-  "bugs": "https://github.com/leonardfreitas/prumo/issues",
+  "homepage": "https://github.com/stjosephworks/prumo#readme",
+  "bugs": "https://github.com/stjosephworks/prumo/issues",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/leonardfreitas/prumo.git",
+    "url": "git+https://github.com/stjosephworks/prumo.git",
     "directory": "cli"
   },
   "license": "MIT",

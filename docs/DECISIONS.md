@@ -8501,3 +8501,42 @@ deleting all three and packing, which rebuilt them, then installing the real tar
 that carried `.prumo/`, `AGENTS.md` and `.gitignore`.
 
 **Affects:** `docs/brand/`, `README.md`, `docs/README.md`, `cli/package.json`
+
+---
+
+## 2026-09-16: The package is `@stjoseph/prumo`, and the repository lives in the organisation
+
+**Decision:** the published name is `@stjoseph/prumo`, under the npm organisation `stjoseph`. The repository moved
+to `github.com/stjosephworks/prumo`. The command a user types after installing is still `prumo`, because that
+comes from the `bin` field and not from the package name.
+
+**Why the unscoped name was impossible:** npm refused `prumo` with 403, `Package name too similar to existing
+package pump`. The similarity check runs only at publish time, which is why the registry had answered 404 for the
+name all along: it was unregistered and unusable at the same time. Scoped names bypass that check.
+
+**Found while looking for a name:** `create-prumo` already exists on npm, published in August 2026 by another
+author, described as an operational framework for building software with AI agents. Another project is using the
+same word in the same field.
+
+**Options considered:** A) `prumo-cli`, unscoped and untested against the same rule. B) `@leonardfreitas/prumo`,
+available immediately. C) an organisation scope.
+
+**Reasoning:** C. A personal scope reads as an experiment, which matters more than usual here because a second
+Prumo already exists. An organisation gives the project a house that outlives one package and one person. The
+name came from the user: Saint Joseph, patron of carpenters, whose tool is the plumb bob the project is named
+after and drawn with.
+
+**Why the two namespaces differ:** `stjoseph` was free on npm and taken on GitHub, so the GitHub organisation is
+`stjosephworks`. A second npm organisation was refused: it would mean two namespaces to administer for a suffix
+that exists only to dodge a collision in one of them.
+
+**Verified after each step, not assumed:** GitHub's anonymous API rate limit returns 403 for every name once
+exhausted, which made a first availability sweep report every candidate as taken. The sweep was redone through an
+authenticated client. After the transfer, the packed tarball was installed into an empty project: it reports
+`@stjoseph/prumo 0.0.1 MIT`, points at the organisation's repository, and its `prumo` binary generated a project
+with `.prumo/` and a `.gitignore`.
+
+**What it costs:** the install command carries a scope forever, and the npm organisation and the GitHub
+organisation are spelled differently, which someone will eventually notice and ask about.
+
+**Affects:** `cli/package.json`, `README.md`, `docs/README.md`, `.github/workflows/ci.yml`, the repository's URL

@@ -1,4 +1,4 @@
-<img src="https://raw.githubusercontent.com/leonardfreitas/prumo/main/docs/brand/icon.png" alt="" width="28" align="left">
+<img src="https://raw.githubusercontent.com/stjosephworks/prumo/main/docs/brand/icon.png" alt="" width="28" align="left">
 
 # Prumo's own documents
 
