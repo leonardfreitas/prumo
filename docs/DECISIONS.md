@@ -8684,3 +8684,27 @@ signing in lands on the profile again.
 
 **Affects:** `templates/web/src/features/auth/`, `templates/web/src/app.spec.tsx`, `templates/web/README.md`,
 `templates/workspace/README.md`
+
+---
+
+## 2026-09-17: `web/routing.md` states the session refetch rule
+
+**Decision:** after signing in, signing up or signing out, a web project awaits `refetchQueries` for the session
+before navigating, and never invalidates it. The rule, its reason, an example pair and a test requirement are in
+`web/routing.md`.
+
+**Options considered:** A) state the rule in the knowledge base. B) leave it in the two template forms as a code
+comment.
+
+**Reasoning:** A. The defect of the same day was written by obeying two documented rules at once: load through
+`ensureQueryData` in `web/routing.md`, invalidate after a change in `client/data.md`. Both are right on their own.
+A comment protects the two forms that carry it; the rule protects the next form an assistant writes in a generated
+project, which would otherwise repeat the defect by following the documents to the letter.
+
+**The test requirement is part of the rule on purpose:** the first test written for sign-up started on the sign-up
+page and passed with the defect in place. The document says to start from a protected route.
+
+**What A costs:** one more rule in a document every web project loads, for a failure that only a session query
+produces.
+
+**Affects:** `web/routing.md`

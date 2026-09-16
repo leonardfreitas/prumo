@@ -14,6 +14,9 @@ types the router derives from the file name.
 Let TanStack Query own the cache. Use a route loader only to call `ensureQueryData`, and read the data in
 the component through the Query hook. Never pass loader data down as props.
 
+**After signing in, signing up or signing out, `await` a `refetchQueries` of the session before navigating.**
+Never `invalidateQueries` for it.
+
 ## Rationale
 
 The generated route tree is committed because application code imports it, so without it `tsc` fails on a
@@ -35,6 +38,14 @@ which refuses it, but only after a round trip and with an error the user cannot 
 The loader prefetches rather than fetches because two caches holding the same data is how *why did the
 screen not update* becomes unanswerable. Data handed down as props sits in no cache, so invalidating
 after a mutation never reaches it.
+
+**The session is the one query where invalidating fails silently.** The authenticated layout reads it
+with `ensureQueryData`, which fetches only when the cache is empty, and a visitor without a session leaves
+`null` there, which is not empty. `invalidateQueries` only marks it stale and refetches what a component
+observes, and nothing observes the session. So the sign-in succeeds, the server holds a session, and the
+layout reads the cached `null` and sends the visitor back to sign in. `refetchQueries` includes queries
+nobody observes and resolves once the new value is cached. Following the loader rule above and the
+invalidation rule in `data.md` to the letter is exactly how this defect is written.
 
 ## Applies to
 
@@ -66,6 +77,15 @@ Loading data:
     // component: props.orders
 ```
 
+After the session changes:
+
+```
+✅  await queryClient.refetchQueries({ queryKey: sessionQuery(auth).queryKey })
+    await navigate({ to: redirect ?? '/' })
+❌  await queryClient.invalidateQueries({ queryKey: sessionQuery(auth).queryKey })
+    // the layout still reads the cached null
+```
+
 ## Enforcement
 
 **Structural.** A route inside the authenticated layout cannot skip the redirect, because the layout runs
@@ -74,8 +94,13 @@ first.
 **Compiler.** `validateSearch` makes the search params' types reflect what survived validation, so a
 component cannot read a field the schema does not produce.
 
-**Review only.** That the loader prefetches rather than returning data the component consumes, and that a
-route needing a session was not placed outside the layout.
+**Tests.** A test that renders the app at a protected route, signs in, and expects the protected page. It
+must start from the protected route: starting on the sign-in page never caches the `null`, and passes with
+the defect in place.
+
+**Review only.** That the loader prefetches rather than returning data the component consumes, that a
+route needing a session was not placed outside the layout, and that every form changing the session
+refetches it.
 
 **A tie worth knowing:** the query key is shared between the loader and the component. If they differ, the
 prefetch fills one cache entry and the component reads another, paying for the request twice and gaining
