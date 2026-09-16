@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/@stjoseph/prumo"><img src="https://img.shields.io/npm/v/%40stjoseph%2Fprumo?color=1e3a5f&label=npm" alt="npm"></a>
-  <a href="https://github.com/stjosephworks/prumo/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/%40stjoseph%2Fprumo?color=1e3a5f" alt="MIT"></a>
+  <a href="https://github.com/stjosephworks/prumo/blob/main/LICENSE"><img src="https://img.shields.io/github/license/stjosephworks/prumo?color=1e3a5f" alt="MIT"></a>
 </p>
 
 Prumo is a set of choices a team has already made, packaged so that starting a new TypeScript
