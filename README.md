@@ -102,7 +102,7 @@ Once written, those documents belong to the team. Prumo does not come back and r
 
 ## Status
 
-Prumo is in beta. `0.0.1` is the first published version: every template runs and every generated
+Prumo is in beta. `0.0.2` is the first published version: every template runs and every generated
 project is verified in CI, and what a generated project looks like can still change before 1.0.
 What is known to be missing is listed in [`docs/OPEN-QUESTIONS.md`](https://github.com/stjosephworks/prumo/blob/main/docs/OPEN-QUESTIONS.md), and
 `prumo new` is the only command. Updating a project's `.prumo/` in place comes after 1.0.

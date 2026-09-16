@@ -8540,3 +8540,25 @@ with `.prumo/` and a `.gitignore`.
 organisation are spelled differently, which someone will eventually notice and ask about.
 
 **Affects:** `cli/package.json`, `README.md`, `docs/README.md`, `.github/workflows/ci.yml`, the repository's URL
+
+---
+
+## 2026-09-16: The first published version is `0.0.2`
+
+**Decision:** `0.0.1` is abandoned and the first version on the registry is `0.0.2`.
+
+**Why:** `0.0.1` was published and then unpublished. npm keeps the name reserved and the permissions intact, but
+refuses to reuse an unpublished version number for 24 hours, so the choice was to wait a day or to move the
+number. The evidence was three signals that only fit together this way: `npm access list packages` reported
+`@stjoseph/prumo: read-write`, the public registry answered `{"error":"Not found"}`, and `npm publish` answered
+`cannot publish over the previously published versions: 0.0.1`.
+
+**Reasoning:** the number of a first release is worth nothing to whoever installs it, and the package it would
+name was already verified by installing it. A day of waiting buys only the look of the number.
+
+**Worth recording, because it was my sequencing error:** the unpublish was a reaction to the npm page showing a
+broken licence link and a broken logo. Neither was a defect in the package. Both were consequences of my holding
+the commits back so that GitHub would not describe a release that did not exist yet, which also held back the
+`LICENSE` and the images the README points at. The right split was to push the files and hold only the sentence.
+
+**Affects:** `cli/package.json`, `README.md`
