@@ -1,0 +1,17 @@
+{
+  "name": "workspace",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "prepare": "node .githooks/install.mjs"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "catalog:"
+  },
+  "engines": {
+    "node": ">=22.17.0"
+  }
+}

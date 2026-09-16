@@ -1,0 +1,6 @@
+node_modules
+dist
+templates
+.prumo-templates
+README.md
+*.tgz

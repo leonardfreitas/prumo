@@ -1,0 +1,5 @@
+node_modules
+
+# A template ships exact versions and no lockfile, but a generated project must commit its own.
+# So the exclusion lives here, not in the template's .gitignore.
+templates/*/pnpm-lock.yaml

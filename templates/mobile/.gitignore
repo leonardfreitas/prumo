@@ -1,0 +1,11 @@
+node_modules
+.expo
+dist
+coverage
+expo-env.d.ts
+*.tsbuildinfo
+.env
+.env*.local
+/ios
+/android
+.metro-health-check*

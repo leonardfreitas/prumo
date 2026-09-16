@@ -1,0 +1,21 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.13/schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": { "includes": ["**", "!dist", "!coverage", "!.expo", "!assets"] },
+  "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 100 },
+  "linter": { "rules": { "preset": "recommended" } },
+  "javascript": { "formatter": { "quoteStyle": "single", "semicolons": "asNeeded" } },
+  "overrides": [
+    {
+      "includes": ["src/global.css"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            // NativeWind 4 needs Tailwind 3's @tailwind directives; Biome only knows Tailwind 4's syntax.
+            "noUnknownAtRules": "off"
+          }
+        }
+      }
+    }
+  ]
+}

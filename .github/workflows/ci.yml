@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Versions are pinned exactly with no lockfile, so a rotted transitive turns this red on its own.
+    - cron: '0 6 * * 1'
+
+jobs:
+  repository:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: cli/pnpm-lock.yaml
+      - run: pnpm install
+        working-directory: cli
+      - run: pnpm lint
+        working-directory: cli
+      - run: pnpm typecheck
+        working-directory: cli
+      - run: pnpm test
+        working-directory: cli
+
+  packaged:
+    # The path a user actually takes. npm deletes files from a tarball, so only installing proves what ships.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: cli/pnpm-lock.yaml
+      - run: pnpm install
+        working-directory: cli
+      - run: pnpm build
+        working-directory: cli
+      - run: npm pack --pack-destination ${{ runner.temp }}
+        working-directory: cli
+      - name: Install the packed CLI
+        run: |
+          npm init -y
+          npm install ${{ runner.temp }}/prumo-*.tgz
+        working-directory: ${{ runner.temp }}
+      - name: Generate from the installed package
+        run: ./node_modules/.bin/prumo new packaged --types api,web --single-tenant --skip-install
+        working-directory: ${{ runner.temp }}
+      - name: Assert what npm is known to delete arrived anyway
+        run: |
+          for file in .gitignore apps/api/.gitignore apps/web/.gitignore \
+                      .githooks/pre-commit apps/api/.env.example .prumo/INDEX.md; do
+            test -f "$file" || { echo "missing $file"; exit 1; }
+          done
+          ! test -e gitignore
+        working-directory: ${{ runner.temp }}/packaged
+
+  generated:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: an-api
+            types: api
+            architecture: alone
+          - name: a-web
+            types: web
+            architecture: alone
+          - name: a-mobile
+            types: mobile
+            architecture: alone
+          - name: a-site
+            types: site
+            architecture: alone
+          - name: everything
+            types: api,web,mobile,site
+            architecture: monorepo
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: cli/pnpm-lock.yaml
+      - run: pnpm install
+        working-directory: cli
+      - name: Generate ${{ matrix.name }}
+        run: node ../cli/src/cli.ts new ${{ matrix.name }} --types ${{ matrix.types }} --single-tenant
+        working-directory: ${{ runner.temp }}
+      - name: Verify ${{ matrix.name }}
+        run: >
+          node cli/scripts/verify.mjs ${{ runner.temp }}/${{ matrix.name }}
+          --types ${{ matrix.types }} --architecture ${{ matrix.architecture }}

@@ -1,0 +1,5 @@
+allowBuilds:
+  # Denied by create-next-app itself; Next resolves sharp's platform binary without running its install script.
+  sharp: false
+  # Denied by create-next-app itself; its prebuilt binary arrives as an optional dependency.
+  unrs-resolver: false

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.13/schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": { "includes": ["**", "!dist", "!coverage", "!migrations"] },
+  "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 100 },
+  "linter": {
+    "rules": {
+      "preset": "recommended",
+      // Nest injects by the emitted constructor type; `import type` erases it and breaks injection silently.
+      "style": { "useImportType": "off" }
+    }
+  },
+  "javascript": {
+    "formatter": { "quoteStyle": "single", "semicolons": "asNeeded" },
+    // Nest decorates constructor and handler parameters; Biome cannot parse those without this.
+    "parser": { "unsafeParameterDecoratorsEnabled": true }
+  }
+}
