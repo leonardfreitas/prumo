@@ -9013,3 +9013,35 @@ path uses `taskkill /T` and a PowerShell process listing, and remains untested.
 **Affects:** `templates/*/scripts/ports.mjs`, `templates/api/package.json`, `templates/*/README.md`,
 `cli/src/compose.ts`, `cli/src/clean.ts`
 
+---
+
+## 2026-09-17: Landing a version bump on main publishes to npm
+
+**Decision:** `ci.yml` gained a `publish` job. On a push to `main`, after `repository`, `packaged` and `generated`
+have all passed, it compares the version in `cli/package.json` with the versions the registry already holds. When
+the version is new it runs `npm publish --access public`; when it is not, it says so and stops. Releasing is
+therefore a commit that raises the version, with no tag and no release to create by hand.
+
+Authentication is npm's trusted publishing: the job asks for `id-token: write` and npm mints a short-lived token
+from it, so the repository keeps no npm secret. The job installs `npm@latest` first, because trusted publishing
+needs npm 11.5.1 or later and the npm bundled with Node may be older. Provenance needs no flag: npm attaches it for
+a public package published from a public repository through OIDC.
+
+**Options considered:**
+- Trigger: A) a version change on `main`; B) pushing a `v*` tag; C) creating a GitHub Release.
+- Authentication: A) trusted publishing through OIDC; B) an `NPM_TOKEN` secret.
+- Gate: A) the whole CI, matrix included; B) only the fast checks.
+
+**Reasoning:** A, A and A. A version bump is already the commit that decides a release, and comparing against the
+registry makes the job idempotent: every other push to `main` is a no-op instead of a failure. The token approach
+had already broken once in practice, with an expired credential answering `404` on a scoped package, and a secret
+in the repository is usable by any workflow in it. The matrix is the only thing that proves a generated project
+runs, so a version that has not passed it has no business on npm.
+
+**What it costs:** a release waits for the full matrix, which takes many minutes and needs Docker. Forgetting the
+bump publishes nothing and says nothing, which is quiet in both directions. Trusted publishing must be configured
+once on npmjs.com against the workflow filename, so renaming `ci.yml` breaks publishing until the setting follows.
+Publishing lives in the same workflow as the checks, so that file now carries the credential-bearing permission.
+
+**Affects:** `.github/workflows/ci.yml`, `README.md`
+

@@ -120,6 +120,12 @@ Once written, those documents belong to the team. Prumo does not come back and r
 | [`docs/DECISIONS.md`](https://github.com/stjosephworks/prumo/blob/main/docs/DECISIONS.md) | Every decision, why it won, and what it costs |
 | [`docs/OPEN-QUESTIONS.md`](https://github.com/stjosephworks/prumo/blob/main/docs/OPEN-QUESTIONS.md) | What has been raised and is still unresolved |
 
+## Releasing
+
+`main` publishes itself. A push to `main` runs the whole CI, and when `cli/package.json` carries a version the
+registry does not have yet, the `publish` job sends it to npm through npm's trusted publishing, with provenance and
+without a token in the repository. Any other push to `main` publishes nothing.
+
 ## Status
 
 Prumo is in beta. `0.0.1` is the first published version: every template runs and every generated
