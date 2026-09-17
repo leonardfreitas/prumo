@@ -9362,3 +9362,36 @@ means building the selector anyway, against a site whose routes assumed a single
 **Affects:** `stjosephworks/prumo-site`
 
 ---
+
+---
+
+## 2026-09-17: Work reaches `main` through `dev` and `alpha`, and nothing is pushed to them
+
+**Decision:** `main`, `alpha` and `dev` accept commits only through a pull request. A ruleset named `flow` protects
+the three: a pull request is required, force pushes and deletions are refused, the CI jobs and the flow check must
+pass, and nobody bypasses it, the repository's admin included. Work goes up one chain: a branch of your own into
+`dev`, `dev` into `alpha`, `alpha` into `main`. A release is therefore `alpha` reaching `main`, which is what
+publishes to npm.
+
+**The chain is a status check, not a rule.** No ruleset rule says where a pull request may come from, verified
+against GitHub's list of available rules for rulesets. `.github/workflows/flow.yml` compares `github.base_ref`
+with `github.head_ref` and fails when the pair skips a step; the ruleset then requires that check like any other.
+`ci.yml` also had to learn about the new branches: it ran only on `main`, and a required check that never runs
+blocks a merge forever.
+
+**Options considered:**
+- Bypass: A) nobody, admin included; B) the admin may push directly.
+- Required checks: A) every CI job and the flow check; B) only the fast ones.
+- Urgency: A) a hotfix climbs the chain like everything else; B) `hotfix/*` may open a pull request into `main`.
+
+**Reasoning:** A, A and A. In a repository with one person, an admin bypass turns the rule into a suggestion, and
+the person who would use it is the only one it protects. The matrix is what proves a generated project runs, so
+requiring it is the only way the chain means anything. A hotfix that skips `alpha` leaves `main` and `alpha`
+divergent until somebody remembers to sync them, which is a state nobody notices until the next release carries it.
+
+**What it costs:** three pull requests to get one line into `main`, and about three minutes of CI at each step.
+Deleting or renaming `dev` or `alpha` now needs the ruleset edited first. Renaming a CI job breaks merging until the
+required check names follow, exactly as renaming `ci.yml` would break publishing.
+
+**Affects:** `.github/workflows/flow.yml`, `.github/workflows/ci.yml`, `CLAUDE.md`
+
