@@ -9255,3 +9255,110 @@ which a note explains but does not remove. Adding a page now means adding two.
 **Affects:** `stjosephworks/prumo-site`
 
 ---
+
+## 2026-09-17: The website is hosted on Vercel
+
+**Decision:** `prumo-site` deploys to Vercel, connected to the repository, with a preview deployment per pull
+request and `main` as production. The site is not forced into `output: 'export'`.
+
+**Options considered:**
+- A) Vercel.
+- B) GitHub Pages with `output: 'export'`.
+- C) Cloudflare Pages.
+
+**Reasoning:** A. The `site` template is a plain Next application on the defaults, and Vercel runs it with nothing
+configured. A documentation site is reviewed by looking at it, not by reading its diff, and a preview URL per pull
+request is the only one of the three that gives that without extra wiring. It also leaves the door open for the day
+the Desktop download reads GitHub's latest release, which under a static export would need a scheduled rebuild.
+
+**B was close, and this is what decided against it:** everything the site shows changes only by a commit, because
+the documents are pinned by SHA, so a static export is genuinely viable and would have cost nothing in content. It
+loses `next/image` optimisation, which matters for a page whose job is a first impression, and it turns the future
+release lookup into a cron.
+
+**What A costs:** a commercial account the project now depends on, and a host whose free tier's terms can change.
+The site is also the first part of Prumo tied to one vendor, where the CLI and the Desktop are tied to none.
+
+**Affects:** `stjosephworks/prumo-site`
+
+---
+
+## 2026-09-17: One markdown pipeline at build, and the site's own pages are TSX
+
+**Decision:** the fetched markdown is converted to HTML at build by a `unified` pipeline: `remark-parse`,
+`remark-gfm`, `remark-rehype`, heading slugs and anchor links, and Shiki for code. The pages the site writes are
+ordinary TSX components reading a translation dictionary, not MDX, and no MDX is installed.
+
+**Options considered:**
+- A) A `unified` pipeline for the fetched files, TSX for the site's own pages.
+- B) Fumadocs.
+- C) The same pipeline, with `@next/mdx` for the site's own pages.
+
+**Reasoning:** A. The site's own pages are layout rather than prose, a hero, an install block with npm and pnpm
+side by side, cards: that is component work, and MDX's advantage only appears where long prose occasionally needs a
+component. In two languages, C also turns every page into two files that drift apart with nothing comparing them,
+where a dictionary keeps the structure in one place and only the strings in two.
+
+**B was the strongest alternative and lost on a structural mismatch:** Fumadocs would arrive with the sidebar,
+table of contents, search and i18n already solved, which is real work it would save. Its content layer expects MDX
+files in the repository, and ours is markdown fetched from two other repositories and pinned by commit, so the part
+that saves the most work is the part that does not fit. It would also own `app/` and bring its own dependency
+versions into a template whose versions are pinned exactly.
+
+**What A costs:** the sidebar, the table of contents and the navigation between documents are written by hand, and
+they are precisely what Fumadocs would have given. Search is not solved by this choice either and is decided
+separately. Every rendering detail markdown can contain, tables, nested lists, footnotes, is ours to style, and
+the source documents use them heavily.
+
+**Affects:** `stjosephworks/prumo-site`
+
+---
+
+## 2026-09-17: Search is a JSON index emitted by the build, searched in the browser
+
+**Decision:** the same pipeline that renders the markdown emits a search index: one record per heading, holding the
+document, the heading text, its anchor and the paragraph under it. The browser loads that JSON and filters it. No
+search service, and no second pass over the build output.
+
+**Options considered:**
+- A) A JSON index emitted by the existing pipeline, filtered client-side.
+- B) Pagefind, run over the build output.
+- C) No search in version 1.
+
+**Reasoning:** A. `DECISIONS.md` is 476 KB and is the most persuasive thing Prumo has to show, every choice with
+its reasoning and its price, and without search it is a wall nobody scrolls. The corpus is about ten documents, so
+an index built from a parse that already happens is enough, and it costs one more output from a step the build
+already runs. C leaves the project's best material unreachable. B is the better search and needs a post-build pass
+over rendered HTML, which outside `output: 'export'` is a step that exists only to serve the index and breaks on a
+Next upgrade.
+
+**What A costs:** substring matching, with no ranking, no stemming and no tolerance for a typo, so a reader who
+searches `authentication` does not find `auth`. The index grows with the documents, and `DECISIONS.md` alone is
+hundreds of headings, so it is only small while the corpus is; the day it is not, B becomes right and this is
+rewritten.
+
+**Affects:** `stjosephworks/prumo-site`
+
+---
+
+## 2026-09-17: The website documents one Prumo, the one it is pinned to
+
+**Decision:** the documentation is not versioned. The site describes the commits its manifest pins, and shows the
+CLI version it is describing in the footer. There is no version selector and no archive.
+
+**Options considered:**
+- A) The current version only.
+- B) Versioned routes and a selector from the start.
+
+**Reasoning:** A. `0.0.1` is the only version ever published and Prumo is in beta, so B would build the whole
+mechanism, a set of pins per version and a selector over it, to serve an archive containing one entry. The
+manifest's pins already state which Prumo the site describes, which is the honest part of versioning, and it costs
+a line in the footer.
+
+**What A costs:** when 1.0 changes what a generated project looks like, and the README already says it can, anyone
+still on a 0.0.x project finds a site describing something else, with no older copy to read. Recovering it then
+means building the selector anyway, against a site whose routes assumed a single version.
+
+**Affects:** `stjosephworks/prumo-site`
+
+---
