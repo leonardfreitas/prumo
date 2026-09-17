@@ -135,6 +135,36 @@ describe('generate', () => {
     expect(await readFile(join(target, 'CLAUDE.md'), 'utf8')).toBe('@AGENTS.md\n')
     expect(existsSync(join(target, '.git'))).toBe(true)
     expect(existsSync(join(target, '.githooks/install.mjs'))).toBe(true)
+    expect(await readFile(join(target, '.env'), 'utf8')).toBe(
+      await readFile(join(target, '.env.example'), 'utf8'),
+    )
+  })
+
+  it('gives an alone API a local .env with a secret of its own', async () => {
+    root = await mkdtemp(join(tmpdir(), 'prumo-new-'))
+    const first = join(root, 'first')
+    const second = join(root, 'second')
+
+    for (const target of [first, second]) {
+      await generate({
+        templates,
+        knowledge,
+        target,
+        install: false,
+        answers: { name: 'acme', types: ['api'], architecture: 'alone', multiTenant: false },
+      })
+    }
+
+    const secret = async (target: string) =>
+      /^BETTER_AUTH_SECRET=(.*)$/m.exec(await readFile(join(target, '.env'), 'utf8'))?.[1]
+    const example = await readFile(join(first, '.env.example'), 'utf8')
+    const env = await readFile(join(first, '.env'), 'utf8')
+
+    expect(await secret(first)).toMatch(/^[\w-]{43}$/)
+    expect(await secret(first)).not.toBe(await secret(second))
+    expect(env.replace(/^BETTER_AUTH_SECRET=.*$/m, '')).toBe(
+      example.replace(/^BETTER_AUTH_SECRET=.*$/m, ''),
+    )
   })
 
   it('composes a multi-tenant workspace with every matching area and one scheme', async () => {
@@ -172,6 +202,16 @@ describe('generate', () => {
     expect(existsSync(join(target, '.githooks/install.mjs'))).toBe(true)
     expect(existsSync(join(target, 'apps/api/.githooks'))).toBe(false)
     expect(env).toMatch(/^MOBILE_APP_SCHEME=acme$/m)
+    expect(await readFile(join(target, 'apps/api/docker-compose.yml'), 'utf8')).toMatch(
+      /^name: acme$/m,
+    )
+    expect(await readFile(join(target, 'apps/api/.env'), 'utf8')).toMatch(
+      /^MOBILE_APP_SCHEME=acme$/m,
+    )
+    expect(await readFile(join(target, 'apps/mobile/.env'), 'utf8')).toBe(
+      await readFile(join(target, 'apps/mobile/.env.example'), 'utf8'),
+    )
+    expect(existsSync(join(target, '.env'))).toBe(false)
     expect(app.expo.scheme).toBe('acme')
     expect(JSON.parse(await readFile(join(target, 'package.json'), 'utf8')).name).toBe('acme')
   })

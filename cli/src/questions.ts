@@ -2,6 +2,7 @@ import type { Asker } from './asker.ts'
 import type { AppType } from './compose.ts'
 import type { Answers } from './context.ts'
 import { validateProjectName } from './names.ts'
+import { CliError } from './output.ts'
 
 export type Flags = {
   name: string | undefined
@@ -17,7 +18,8 @@ const TYPES: AppType[] = ['api', 'web', 'mobile', 'site']
 const TENANT_AWARE: AppType[] = ['api', 'web', 'mobile']
 
 function missing(flag: string): never {
-  throw new Error(
+  throw new CliError(
+    'needs_input',
     `Missing ${flag}. Outside an interactive terminal every answer must come from a flag.`,
   )
 }
@@ -27,7 +29,10 @@ function parseTypes(value: string): AppType[] {
   const unknown = types.filter((type) => !TYPES.includes(type as AppType))
 
   if (unknown.length > 0 || types.length === 0) {
-    throw new Error(`Unknown type: ${unknown.join(', ')}. Choose from ${TYPES.join(', ')}.`)
+    throw new CliError(
+      'invalid_input',
+      `Unknown type: ${unknown.join(', ')}. Choose from ${TYPES.join(', ')}.`,
+    )
   }
 
   return [...new Set(types)] as AppType[]
@@ -35,11 +40,11 @@ function parseTypes(value: string): AppType[] {
 
 export async function resolveAnswers(flags: Flags, asker: Asker | undefined): Promise<Answers> {
   if (flags.alone && flags.monorepo) {
-    throw new Error('Choose --alone or --monorepo, not both.')
+    throw new CliError('invalid_input', 'Choose --alone or --monorepo, not both.')
   }
 
   if (flags.multiTenant && flags.singleTenant) {
-    throw new Error('Choose --multi-tenant or --single-tenant, not both.')
+    throw new CliError('invalid_input', 'Choose --multi-tenant or --single-tenant, not both.')
   }
 
   const name: string =
@@ -48,7 +53,7 @@ export async function resolveAnswers(flags: Flags, asker: Asker | undefined): Pr
   const invalid = validateProjectName(name)
 
   if (invalid !== undefined) {
-    throw new Error(`Invalid project name "${name}". ${invalid}`)
+    throw new CliError('invalid_input', `Invalid project name "${name}". ${invalid}`)
   }
 
   let types: AppType[]
@@ -65,7 +70,10 @@ export async function resolveAnswers(flags: Flags, asker: Asker | undefined): Pr
 
   if (types.length > 1) {
     if (flags.alone) {
-      throw new Error('--alone holds a single type; several types make a workspace.')
+      throw new CliError(
+        'invalid_input',
+        '--alone holds a single type; several types make a workspace.',
+      )
     }
     architecture = 'monorepo'
   } else if (flags.monorepo) {

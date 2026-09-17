@@ -8610,3 +8610,332 @@ the five generated projects, including the four type workspace.
 anyone opened a result. The weekly schedule and the push trigger were live the whole time, failing silently.
 
 **Affects:** `.github/workflows/ci.yml`, `cli/package.json`
+
+---
+
+## 2026-09-17: `pnpm dev` starts every app, and `pnpm <app>` starts one
+
+**Decision:** a generated workspace's root carries `dev`, running `pnpm -r --parallel dev`, and one script per app
+it holds, named after the app and running `pnpm --filter <app> dev`. Every template answers to `dev`: the API and
+mobile keep their framework's own script and alias it. The site moves to port 3200.
+
+**This reverses the entry of 2026-09-14**, which refused a root `dev` because someone typing it expecting their
+own app would start four processes. The user asked for both commands, and the argument loses its force once
+`pnpm web` exists beside `pnpm dev`: the one-app command is as short as the all-apps one, so starting everything
+becomes a choice rather than an accident.
+
+**Options considered:**
+- A) `pnpm dev` for every app, plus one script per app.
+- B) Only the per-app scripts.
+- C) `pnpm dev` for the servers, mobile only through its own script.
+
+**Verified by running it, not by reading it.** A four-type workspace was generated, its database started and
+migrated, and `pnpm dev` run: within six seconds the API answered its health check on 3000, web on 5173, the site
+on 3200 and Metro on 8081. `pnpm web` alone started web and left the API down.
+
+**What A costs, measured under a pseudo terminal:** `pnpm mobile` draws the QR code, prints the `exp://` URL and
+lists the keyboard shortcuts. Under `pnpm dev` none of the three appear, because Expo no longer owns the terminal.
+Metro still serves, so an open simulator connects. The documented path is `pnpm mobile` in a terminal of its own.
+If that proves a nuisance, C is the fallback.
+
+**A collision that already existed:** `next dev` defaults to 3000, which the API holds, so a workspace with both
+could never run them together, `pnpm dev` or not. Verified in Next's own `--help`.
+
+**Found on the way, and fixed:** the CLI picked its templates by probing `cli/templates` before the repository's
+`templates/`. After any build, running the CLI from source silently generated from the stale build copy. The
+first run of this check generated a site on port 3000 with no API and no mobile in `pnpm dev`, which is how it
+surfaced. `docs/maintaining-templates.md` tells maintainers to verify a change exactly that way, so every such
+verification after a build was checking yesterday's templates. Assets are now resolved by where the CLI runs
+from, `src` or `dist`, and two tests fail if the origins are swapped.
+
+**Affects:** `templates/*/package.json`, `templates/*/README.md`, `cli/src/compose.ts`, `cli/src/assets.ts`,
+`cli/src/cli.ts`, `cli/scripts/verify.mjs`, `monorepo/tasks.md`
+
+---
+
+## 2026-09-17: The web template's sign-in never reached the app in a browser
+
+**Found because the user could not find where to see the flow.** Walking it in headless Chrome showed the defect:
+opening `/` sent the visitor to sign in, signing up and signing in both succeeded, the database held the user and
+two sessions, the API set its `HttpOnly; SameSite=Lax` cookie with credentials allowed, and the visitor was sent
+straight back to sign in every time.
+
+**Cause, read in the installed `@tanstack/query-core` 5.102.8 rather than recalled:** the protected route reads
+the session with `ensureQueryData`, which fetches only when the cache is empty. A visitor without a session
+leaves `null` there, and `null` is not empty. The forms then called `invalidateQueries`, which marks the query
+stale and refetches only queries something observes. Nothing observes the session on web, so the route kept
+reading the cached `null`.
+
+**Fix:** both forms call `refetchQueries` instead, which by default includes queries nothing observes and waits
+for the new session before navigating.
+
+**Why mobile is not affected:** its root layout keeps `useQuery(sessionQuery)` mounted for the life of the app,
+so the same `invalidateQueries` finds an active observer and refetches. That correctness is incidental to the
+layout, not stated anywhere.
+
+**Why nothing caught it:** CI checks the API through `fetch`, and the web tests rendered forms against a fake
+transport without a session ever being cached first. Two router level tests now walk the journeys a visitor
+takes, starting from `/`. The first version of the sign-up test started at `/sign-up` and passed with the defect
+restored, because only a protected route caches the `null`; it was rewritten and now fails when either form is
+reverted.
+
+**Verified in the browser after the fix:** sign-up lands on the profile, clearing cookies returns to sign in, and
+signing in lands on the profile again.
+
+**Affects:** `templates/web/src/features/auth/`, `templates/web/src/app.spec.tsx`, `templates/web/README.md`,
+`templates/workspace/README.md`
+
+---
+
+## 2026-09-17: `web/routing.md` states the session refetch rule
+
+**Decision:** after signing in, signing up or signing out, a web project awaits `refetchQueries` for the session
+before navigating, and never invalidates it. The rule, its reason, an example pair and a test requirement are in
+`web/routing.md`.
+
+**Options considered:** A) state the rule in the knowledge base. B) leave it in the two template forms as a code
+comment.
+
+**Reasoning:** A. The defect of the same day was written by obeying two documented rules at once: load through
+`ensureQueryData` in `web/routing.md`, invalidate after a change in `client/data.md`. Both are right on their own.
+A comment protects the two forms that carry it; the rule protects the next form an assistant writes in a generated
+project, which would otherwise repeat the defect by following the documents to the letter.
+
+**The test requirement is part of the rule on purpose:** the first test written for sign-up started on the sign-up
+page and passed with the defect in place. The document says to start from a protected route.
+
+**What A costs:** one more rule in a document every web project loads, for a failure that only a session query
+produces.
+
+**Affects:** `web/routing.md`
+
+---
+
+## 2026-09-17: Both clients ship sign-out, and signing out clears everything the user left
+
+**Decision:** `web` and `mobile` each carry a **Sign out** button on the profile screen. On web it clears the whole
+query cache and navigates to sign in. On mobile it clears the query cache and every user-scoped storage key, as
+`mobile/storage.md` already required; the Expo plugin deletes the stored cookie itself. Both clear even when the
+sign-out request fails.
+
+**Closes** the open question *Do the client templates ship sign-out?*
+
+**What web clears, options considered:** A) refetch the session only. B) clear the whole cache. C) remove the user's
+queries one by one. **B**, because `['profile', 'me']` holds whoever was signed in: under A the next person on the tab
+signs in and reads the previous profile, which a test proved by showing Bruno the display name *Ana*. C fails the day
+somebody adds a query and forgets the list.
+
+**Where the button lives, options considered:** A) on the profile screen. B) in the authenticated layout. **A**,
+because a day-zero project has one protected screen, and a header built to hold one button is interface to delete;
+moving it when a second screen arrives is a small change that belongs to the project.
+
+**Found on the way, each proved by a failing test before it was fixed:**
+- **Mobile's authenticated layout redirected on a pending session.** Invisible at a cold start, because the root
+  layout holds rendering until the session arrives. But signing out empties the cache, and the next sign-in would
+  have mounted the layout with the session still on its way and sent the person straight back to sign in. The
+  layout now waits while pending. A missing session and an unreadable one still redirect, each with its own test.
+- **Better Auth throws when the sign-out request never arrives**, so clearing after the call would never run on a
+  network failure. Both clients catch it on purpose: the Expo plugin has already deleted the stored cookie before
+  sending, and the server's session expires on its own.
+
+**Verified:** in headless Chrome against a generated workspace, Ana signs up and sees *Ana*, signs out to the sign-in
+page, and Bruno signs up on the same tab and sees *Bruno*. In a composed `api`, `web` and `mobile` workspace, lint,
+typecheck and both clients' seven tests pass with the imports rewritten to the shared contract.
+
+**What it costs:** a failed sign-out leaves a live session on the server until it expires, and on web the HttpOnly
+cookie with it, so reopening the app may show the person still signed in.
+
+**Affects:** `templates/web/src/features/auth/`, `templates/web/src/routes/_authenticated/index.tsx`,
+`templates/web/src/app.spec.tsx`, `templates/mobile/src/features/auth/`, `templates/mobile/src/app/(app)/`,
+`web/routing.md`, `docs/OPEN-QUESTIONS.md`
+
+---
+
+## 2026-09-17: `mobile/routing.md` states that a pending session is not a missing one
+
+**Decision:** the authenticated layout renders nothing while the session is pending, and redirects only once it
+arrives empty or fails to load. The rule, its reason, an example pair and the three test cases are in
+`mobile/routing.md`.
+
+**Options considered:** A) state the rule in the knowledge base. B) leave it as the comment in the template layout.
+
+**Reasoning:** A. The defective check is the obvious one to write, and it is invisible in normal use: the splash
+hides it at every cold start, and only signing out, which empties the cache, exposes it on the next sign-in. A
+comment protects the one layout that carries it; the rule protects the next protected layout written in a generated
+project. The failing-to-load half is stated with it, so that waiting never becomes a way in.
+
+**What A costs:** one more rule in a document every mobile project loads.
+
+**Affects:** `mobile/routing.md`
+
+---
+
+## 2026-09-17: A generated project ships a local `.env`, copied from `.env.example`
+
+**Decision:** when the CLI generates a project, every app that has a `.env.example` (`api`, `web`, `mobile`) also
+gets a `.env` with the same content, so `pnpm dev` runs without a manual copy. The API's `BETTER_AUTH_SECRET` is
+replaced by 32 random bytes, base64url, drawn per project. `.env` stays in `.gitignore`, and the example stays the
+committed truth. `site` reads no environment variable, so it gets neither file.
+
+**Options considered:**
+- A) Write `.env` at generation, with a random secret for the API.
+- B) Write `.env` as a verbatim copy, sample secret included.
+- C) Keep `cp .env.example .env` as a manual first step in each README.
+
+**Reasoning:** A. The manual copy was the one step between generating and seeing the project run, and forgetting it
+fails the API at boot and the clients silently. A verbatim copy would pass validation with a secret that is public
+in this repository and in every generated project, and a development secret tends to outlive development. Drawing
+it costs nothing.
+
+**What A costs:** the README's first line no longer teaches the copy, so a fresh clone of a generated project has no
+`.env` and its developer must read the note that replaces it. The API's example now has two readers that depend on
+its `BETTER_AUTH_SECRET` line; generation fails loudly if the line disappears.
+
+**Amends:** "`.env` is ignored, `.env.example` is committed, production reads neither", which named
+`cp .env.example .env` as the first line of every README.
+
+**Affects:** `cli/src/generate.ts`, `templates/api/README.md`, `templates/web/README.md`,
+`templates/mobile/README.md`
+
+---
+
+## 2026-09-17: The API template creates its own development database, and `pnpm dev` offers to
+
+**Decision:** `templates/api/.env.example` ships `DATABASE_URL=MISSING` and `AUTH_DATABASE_URL=MISSING`. The API
+template carries `scripts/database.mjs`, which has no dependency and is run by `pnpm db:setup`, by `prumo db`, and,
+with `--check`, at the start of the API's `dev` script and of a workspace root's `dev`. While the URL is `MISSING`,
+the check asks whether to create a database and its name. The script uses a Postgres answering on `localhost:5432`
+through `psql`, which it also finds where the EDB installer, Postgres.app and a keg-only Homebrew formula leave it
+off `PATH`. It tries the current OS user and asks for a user and password when refused. Without a local server, it
+offers the Docker service in `docker-compose.yml`. It requires Postgres 18, creates the database (reusing one that
+exists), applies `docker/init/*.sql` so both servers get the `auth` schema, writes both URLs into `.env`, and runs
+`pnpm db:migrate`. Outside a terminal, or with `--json`, it never asks: a missing answer is an error.
+
+**Options considered:**
+- Where the logic lives: A) a script in the template, which `prumo db` only runs; B) the CLI, with `predev` calling
+  `prumo db --check`.
+- Which server: A) local first, then Docker; B) local only; C) local only, dropping the Docker service.
+- How to create it: A) `psql`, falling back to asking for credentials; B) the `pg` driver from Node.
+
+**Reasoning:** A, A and A. A generated project must run without Prumo on `PATH`: the Desktop embeds the CLI rather
+than installing it, and a teammate who clones the project never installed it. Keeping Docker as the fallback leaves
+the path that already worked intact for anyone without a local Postgres. `psql` works before `pnpm install`, and
+lets a local superuser who needs no password pass without a question; the `pg` driver would need the install and
+always ask.
+
+**The workspace root runs the check before its parallel run,** not only inside the API's `dev`: a question asked
+inside `pnpm -r --parallel` is buried in the other apps' interleaved output. The API's own check then finds a URL
+and does nothing.
+
+**What it costs:** `MISSING` passes the API's own validation, so starting the API with `nest start` directly rather
+than `pnpm dev` fails at connection rather than at validation. The list of places `psql` is looked for is written
+twice, in the template script and in `prumo doctor`, because neither package can import the other. The logic ships
+inside every generated project, so a fix reaches existing projects only by hand. `docker/init/` is now read by two
+things, and a script placed there must stay valid on a server Docker did not initialise.
+
+**Amends:** "`.env` is ignored, `.env.example` is committed, production reads neither", whose example held a working
+sample URL.
+
+**Affects:** `templates/api/scripts/database.mjs`, `templates/api/package.json`, `templates/api/.env.example`,
+`templates/api/README.md`, `templates/workspace/README.md`, `cli/src/compose.ts`, `cli/src/database.ts`,
+`cli/scripts/verify.mjs`
+
+---
+
+## 2026-09-17: The CLI answers `help`, `version`, `doctor` and `db`, and every command takes `--json`
+
+**Decision:** besides `new`, the CLI has `help [command]` (also `--help`, `-h`, and `<command> --help`), `version`
+(also `--version`, `-v`), `doctor` and `db`. Bare `prumo` prints the help. `doctor` checks Node against its floor,
+`pnpm` and `git` as required, and Docker (installed apart from running), `psql`, a server on `localhost:5432`, and
+whether either route to a database exists, as warnings. It exits 1 only when a required check fails.
+
+With `--json`, stdout carries exactly one document: `{ ok: true, command, data }` or
+`{ ok: false, command, error: { code, message } }`, with `data` also present on a failed `doctor`. Nothing is asked,
+and the output of `git`, `pnpm install`, `docker` and migrations goes to stderr. The exit code is 0 exactly when
+`ok` is true. Error codes are strings such as `usage`, `unknown_command`, `needs_input`, `invalid_input`,
+`target_not_empty`, `not_a_project`, `no_api` and `not_ready`; `db` adds its own, from the script.
+
+**Options considered:**
+- A) One final JSON document per run, progress on stderr.
+- B) NDJSON: one line per step, then a result line.
+
+**Reasoning:** A. The Desktop needs a result it can trust more than a live feed, and one document is simple to parse
+and to test; stderr still carries the human log for anyone who wants to show it. B is a larger contract to keep
+stable, for a progress bar nobody has designed yet.
+
+**What it costs:** the Desktop cannot show which step `new` is on, only its raw log. Error codes are now a contract,
+so renaming one is a breaking change.
+
+**Affects:** `cli/src/cli.ts`, `cli/src/commands.ts`, `cli/src/doctor.ts`, `cli/src/output.ts`,
+`cli/src/database.ts`, `cli/src/questions.ts`, `cli/src/generate.ts`, `README.md`
+
+---
+
+## 2026-09-17: `prumo clean` removes what a project needed only once
+
+**Decision:** `prumo clean` removes the database bootstrap from a generated project: `scripts/database.mjs`, the
+`db:setup` script, the `--check` prefix on the API's and the workspace root's `dev`, the README text describing them,
+and the `MISSING` block in `.env.example`, which becomes the sample URL of `docker-compose.yml` again. It lists what
+it will do and asks; without a terminal or with `--json` it needs `--yes`, and `--dry-run` only lists. It refuses
+while `.env` still holds `DATABASE_URL=MISSING`, unless `--force`.
+
+Each item is recognised by the exact text the CLI generates, and the script by the exact content of the template the
+running CLI ships. Anything changed since generation is reported as `modified` and kept. Running it twice finds
+everything `absent`. A project with no API has nothing to clean.
+
+**Nothing else qualifies today.** `.githooks/install.mjs` looks one-time but runs on every clone through `prepare`,
+and `docker/init/` runs whenever the Docker volume is recreated.
+
+**Options considered:**
+- `.env.example` after cleaning: A) the sample URL comes back; B) `MISSING` stays.
+- Recognising items: A) a list in the CLI, matching exact text; B) a manifest written into `.prumo/` at generation.
+- Safety: A) list, confirm, and refuse while `MISSING`; B) list and confirm only.
+
+**Reasoning:** A, A and A. Without the script, `MISSING` is a value nothing explains, while the sample URL works
+with the service the project already carries. Exact matching needs no new file, and a manifest would be one more
+contract for the Desktop to read and for projects generated before it to lack. Cleaning before the database exists
+removes the only help for creating it, which is almost certainly a mistake.
+
+**What it costs:** the list and the templates are two homes for the same text; `clean.spec.ts` generates projects
+and expects every item `pending`, so a template change that breaks the match fails loudly. A project generated by
+an older CLI whose script differs from the current template keeps its script, reported as `modified`. After cleaning,
+`prumo db` no longer works in that project.
+
+**Affects:** `cli/src/clean.ts`, `cli/src/cli.ts`, `cli/src/commands.ts`, `cli/src/database.ts`, `README.md`
+
+---
+
+## 2026-09-17: The development database is always the Docker one
+
+**Decision:** `scripts/database.mjs` no longer looks for a local Postgres. It requires Docker, telling a missing
+installation from a stopped one, starts the service in `docker-compose.yml`, and creates the database inside it
+with the container's own `psql`. The service publishes `${POSTGRES_PORT:-5432}`, and Compose reads `POSTGRES_PORT`
+from the API's `.env`. The script keeps the port the service already publishes; otherwise it takes `POSTGRES_PORT`,
+or the next free port up to twenty above it, and writes it before starting the service. `--port` asks for one port
+and fails if it is taken. The flags `--local`, `--docker`, `--host`, `--user` and `--password` are gone, and
+`prumo doctor` no longer checks `psql` or a local server.
+
+`docker-compose.yml` carries a top-level `name`, which `prumo new` sets to the project's name.
+
+**Options considered:**
+- Server: A) Docker only; B) the local server first, as decided earlier today.
+- A taken port: A) the next free one, kept in `POSTGRES_PORT`; B) fail and explain.
+- Compose project: A) `name:` set at generation; B) named after the folder.
+
+**Reasoning:** A, A and A. Trying the local server first stalled on the first real machine it met: an EDB
+installation refused the OS user, and a password prompt is exactly where someone new to Postgres stops. Docker is
+already required for the API's tests, and its credentials are known, so nothing needs asking but the name. That
+same machine had its own Postgres on 5432, so failing on a taken port would have stalled it again. Named after the
+folder, every workspace's Compose project is `api`, and a second project's `up` replaces the first one's container.
+
+**What it costs:** anyone who prefers their own Postgres edits `.env` by hand. A port chosen for one project can be
+taken by another later, and the script then moves it only when the service is not running. `POSTGRES_PORT` is read
+by Compose and not by the API, so `.env.example` lists a variable the config class does not. A project renamed after
+generation keeps its old Compose name.
+
+**Amends:** "The API template creates its own development database, and `pnpm dev` offers to", whose local-first
+search, `psql` discovery and credential prompts are removed.
+
+**Affects:** `templates/api/scripts/database.mjs`, `templates/api/docker-compose.yml`, `templates/api/.env.example`,
+`templates/api/README.md`, `templates/workspace/README.md`, `cli/src/generate.ts`, `cli/src/doctor.ts`,
+`cli/src/commands.ts`, `cli/src/clean.ts`, `README.md`

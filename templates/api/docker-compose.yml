@@ -1,3 +1,6 @@
+# The Compose project, and so the names of the container and its volume. `prumo new` sets it to the project's name.
+name: api
+
 services:
   postgres:
     image: postgres:18-alpine
@@ -6,7 +9,7 @@ services:
       POSTGRES_PASSWORD: app
       POSTGRES_DB: app
     ports:
-      - '5432:5432'
+      - '${POSTGRES_PORT:-5432}:5432'
     volumes:
       - postgres:/var/lib/postgresql
       - ./docker/init:/docker-entrypoint-initdb.d:ro

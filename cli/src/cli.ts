@@ -1,28 +1,45 @@
 #!/usr/bin/env node
-import { existsSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import * as prompt from '@clack/prompts'
 import { terminalAsker } from './asker.ts'
+import { assetsFor, requireAssets } from './assets.ts'
+import { cleanText, planClean } from './clean.ts'
+import { COMMANDS, findCommand, helpText } from './commands.ts'
+import { runDatabase } from './database.ts'
+import { doctor, doctorText } from './doctor.ts'
 import { generate } from './generate.ts'
 import { validateProjectName } from './names.ts'
+import { CliError, errorEnvelope, writeEnvelope } from './output.ts'
 import { resolveAnswers } from './questions.ts'
 
-const USAGE = `Usage: prumo new [name] [--types api,web,mobile,site] [--alone | --monorepo]
-                  [--multi-tenant | --single-tenant] [--skip-install]`
+type Result = { data: unknown; text: string; exitCode?: number }
 
-function firstExisting(...candidates: string[]): string {
-  const found = candidates.find((candidate) => existsSync(candidate))
+function version(): string {
+  // src/cli.ts and dist/cli.js both sit one level below package.json.
+  const pkg = JSON.parse(readFileSync(join(import.meta.dirname, '..', 'package.json'), 'utf8'))
 
-  if (found === undefined) {
-    throw new Error(`Cannot find ${candidates.join(' or ')}`)
-  }
-
-  return found
+  return pkg.version as string
 }
 
-async function main(): Promise<void> {
+function help(name: string | undefined): Result {
+  if (name === undefined) {
+    return { data: { commands: COMMANDS }, text: helpText() }
+  }
+
+  const command = findCommand(name)
+
+  if (command === undefined) {
+    throw new CliError('unknown_command', `Unknown command "${name}". Run \`prumo help\`.`)
+  }
+
+  return { data: { commands: [command] }, text: helpText(command) }
+}
+
+async function runNew(args: string[], json: boolean): Promise<Result> {
   const { values, positionals } = parseArgs({
+    args,
     allowPositionals: true,
     options: {
       types: { type: 'string' },
@@ -31,18 +48,17 @@ async function main(): Promise<void> {
       'multi-tenant': { type: 'boolean', default: false },
       'single-tenant': { type: 'boolean', default: false },
       'skip-install': { type: 'boolean', default: false },
-      help: { type: 'boolean', default: false },
+      json: { type: 'boolean', default: false },
     },
   })
 
-  const [command, name] = positionals
+  const [name, ...extra] = positionals
 
-  if (values.help || command !== 'new') {
-    console.log(USAGE)
-    process.exit(values.help ? 0 : 1)
+  if (extra.length > 0) {
+    throw new CliError('usage', `Unexpected argument: ${extra.join(' ')}`)
   }
 
-  const interactive = process.stdin.isTTY === true && process.stdout.isTTY === true
+  const interactive = !json && process.stdin.isTTY === true && process.stdout.isTTY === true
   const answers = await resolveAnswers(
     {
       name,
@@ -55,29 +71,130 @@ async function main(): Promise<void> {
     interactive ? terminalAsker(validateProjectName) : undefined,
   )
 
-  if (answers.types.length > 1) {
+  if (!json && answers.types.length > 1) {
     prompt.log.info(
       `${answers.types.length} types make a workspace: apps/ and packages/ under one root.`,
     )
   }
 
-  const here = import.meta.dirname
+  const target = resolve(answers.name)
+  const install = !values['skip-install']
 
   await generate({
-    templates: firstExisting(join(here, '../templates'), join(here, '../../templates')),
-    knowledge: firstExisting(
-      join(here, '../.prumo-templates'),
-      join(here, '../../.prumo-templates'),
-    ),
-    target: resolve(answers.name),
+    ...requireAssets(assetsFor(import.meta.dirname)),
+    target,
     answers,
-    install: !values['skip-install'],
+    install,
+    childOutput: json ? 'stderr' : 'inherit',
   })
 
-  prompt.outro(`Created ${answers.name}.`)
+  if (!json) {
+    prompt.outro(`Created ${answers.name}.`)
+  }
+
+  return { data: { ...answers, target, installed: install }, text: '' }
 }
 
-main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : error)
-  process.exit(1)
-})
+async function runClean(args: string[], json: boolean): Promise<Result> {
+  const { values } = parseArgs({
+    args,
+    options: {
+      'dry-run': { type: 'boolean', default: false },
+      yes: { type: 'boolean', default: false },
+      force: { type: 'boolean', default: false },
+      json: { type: 'boolean', default: false },
+    },
+  })
+
+  const plan = await planClean({
+    cwd: process.cwd(),
+    templates: requireAssets(assetsFor(import.meta.dirname)).templates,
+    force: values.force,
+  })
+  const pending = plan.items.some((item) => item.status === 'pending')
+  const result = (applied: boolean): Result => ({
+    data: { root: plan.root, dryRun: values['dry-run'], applied, items: plan.items },
+    text: cleanText(plan.items),
+  })
+
+  if (!pending || values['dry-run']) {
+    return result(false)
+  }
+
+  if (!values.yes) {
+    const interactive = !json && process.stdin.isTTY === true && process.stdout.isTTY === true
+
+    if (!interactive) {
+      throw new CliError('needs_input', 'Outside an interactive terminal, pass --yes to clean.')
+    }
+
+    console.log(cleanText(plan.items))
+    const confirmed = await prompt.confirm({ message: 'Remove these?', initialValue: false })
+
+    if (prompt.isCancel(confirmed) || !confirmed) {
+      throw new CliError('declined', 'Nothing was removed.')
+    }
+  }
+
+  await plan.apply()
+  return result(true)
+}
+
+async function main(argv: string[]): Promise<void> {
+  const json = argv.includes('--json')
+  const index = argv.findIndex((arg) => !arg.startsWith('-'))
+  const command = index === -1 ? undefined : argv[index]
+  const args = index === -1 ? [] : argv.slice(index + 1)
+  const wantsHelp = argv.includes('--help') || argv.includes('-h')
+  const name = command ?? (argv.includes('--version') || argv.includes('-v') ? 'version' : 'help')
+
+  try {
+    let result: Result
+
+    if (wantsHelp && command !== undefined && command !== 'help') {
+      result = help(command)
+    } else if (name === 'help') {
+      const [topic] = args.filter((arg) => !arg.startsWith('-'))
+      result = help(topic)
+    } else if (name === 'version') {
+      const current = version()
+      result = { data: { version: current }, text: current }
+    } else if (name === 'doctor') {
+      const report = await doctor()
+      if (!report.ready) {
+        throw new CliError('not_ready', 'This machine is missing something Prumo needs.', report)
+      }
+      result = { data: report, text: doctorText(report) }
+    } else if (name === 'db') {
+      // The script writes its own output, --json included.
+      process.exitCode = runDatabase(args, process.cwd())
+      return
+    } else if (name === 'clean') {
+      result = await runClean(args, json)
+    } else if (name === 'new') {
+      result = await runNew(args, json)
+    } else {
+      throw new CliError('unknown_command', `Unknown command "${name}". Run \`prumo help\`.`)
+    }
+
+    if (json) {
+      writeEnvelope({ ok: true, command: name, data: result.data })
+    } else if (result.text !== '') {
+      console.log(result.text)
+    }
+  } catch (error: unknown) {
+    const envelope = errorEnvelope(name, error)
+
+    if (json) {
+      writeEnvelope(envelope)
+    } else if (error instanceof CliError && error.code === 'not_ready') {
+      console.error(doctorText(error.data as Parameters<typeof doctorText>[0]))
+    } else {
+      console.error(envelope.ok ? '' : envelope.error.message)
+    }
+
+    process.exitCode = 1
+  }
+}
+
+await main(process.argv.slice(2))

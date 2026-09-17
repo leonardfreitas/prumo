@@ -31,7 +31,7 @@ workspace holding four applications, without either one carrying rules it has no
 
 ## Requirements
 
-Node 22.17 or later, pnpm, and Docker for anything with an API.
+Node 22.17 or later, pnpm, and Docker for anything with an API. `prumo doctor` checks all of it.
 
 ## Running it
 
@@ -61,6 +61,21 @@ npx @stjoseph/prumo new my-app --types api,web --single-tenant
 | `--alone` or `--monorepo` | How a single type is laid out |
 | `--multi-tenant` or `--single-tenant` | Whether the application serves several tenants |
 | `--skip-install` | Stops after writing the files |
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `prumo new [name]` | Generates a project |
+| `prumo db` | Inside a project with an API: creates the development database in Docker and writes its URL into `.env` |
+| `prumo clean` | Removes what the project needed only once, today the database setup, once the database exists |
+| `prumo doctor` | Checks Node, pnpm, git and Docker on this machine |
+| `prumo version` · `--version` · `-v` | Prints the CLI version |
+| `prumo help [command]` · `--help` | Lists the commands, or describes one |
+
+Every command takes `--json`: stdout then holds exactly one document, `{ "ok": true, "command", "data" }` or
+`{ "ok": false, "command", "error": { "code", "message" } }`, anything written for a person goes to stderr, nothing
+is asked, and the exit code is 0 only when `ok` is true.
 
 ## What it generates
 
@@ -110,6 +125,6 @@ Once written, those documents belong to the team. Prumo does not come back and r
 Prumo is in beta. `0.0.1` is the first published version: every template runs and every generated
 project is verified in CI, and what a generated project looks like can still change before 1.0.
 What is known to be missing is listed in [`docs/OPEN-QUESTIONS.md`](https://github.com/stjosephworks/prumo/blob/main/docs/OPEN-QUESTIONS.md), and
-`prumo new` is the only command. Updating a project's `.prumo/` in place comes after 1.0.
+updating a project's `.prumo/` in place comes after 1.0.
 
 MIT licensed. See [`LICENSE`](https://github.com/stjosephworks/prumo/blob/main/LICENSE).

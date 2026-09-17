@@ -11,7 +11,7 @@ pnpm install
 pnpm dev
 ```
 
-The site runs on `http://localhost:3000`. It calls no API yet; when a page needs data, it fetches it on the server.
+The site runs on `http://localhost:3200`, leaving 3000 to the API. It calls no API yet; when a page needs data, it fetches it on the server.
 
 ## Everyday commands
 

@@ -73,19 +73,6 @@ The same gap hides the guard, the filter and the serializer, none of which a ser
 
 ---
 
-## Do the client templates ship sign-out?
-
-**Raised:** 2026-09-15
-**Question:** `web` and `mobile` ship sign-in, sign-up and an editable profile, and no way to sign out.
-**Why it matters:** under the day-zero test, signing out is day-one work in any app with sign-in, which is the reason sign-up
-was added. On mobile it is also where a silent rule lives: `mobile/storage.md` requires logout to clear the session,
-the persisted query cache and every user-scoped MMKV key, the template has `clearUserData` ready, and nothing calls
-it. Without an example, the first implementation likely clears the session only, and the next user on the device sees
-the previous user's cached data.
-**Blocks:** nothing today; it would add to `templates/web` and `templates/mobile`
-
----
-
 ## How does `prumo update` refresh a project's `.prumo/`?
 
 **Raised:** 2026-09-15
@@ -108,3 +95,15 @@ perform on someone else's repository.
 
 ---
 
+## Should the CLI refuse a project named after a dependency in its own tree?
+
+**Raised:** 2026-09-17
+**Question:** a four-type workspace generated with the name `ws` failed to install with `ERR_PNPM_IGNORED_BUILDS`
+for `bufferutil` and `utf-8-validate`. `ws` is also the WebSocket library Expo depends on, and `pnpm why` listed the
+workspace root, `ws@0.0.1`, as depending on them. The same workspace named `acme` installed cleanly.
+**Why it matters:** the name is the first thing a user types, the failure names two packages the user never
+chose, and nothing points back at the name. Any name that matches a package in the tree could do the same.
+**Blocks:** nothing today. The known candidates are refusing names found in the resolved tree, which is only
+known after installing, or keeping a short list of names the templates are known to pull in.
+
+---

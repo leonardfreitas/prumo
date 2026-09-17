@@ -2,10 +2,14 @@
 
 ## Rule
 
-Give the root `package.json` three scripts (`lint`, `typecheck` and `test`), each running through
-`pnpm -r`.
+Give the root `package.json` a `dev` script that starts every app with `pnpm -r --parallel dev`, and one script
+per app, named after it, that starts only that app with `pnpm --filter <app> dev`. Give it `lint`, `typecheck`
+and `test` as well, each running through `pnpm -r`.
 
-**Do not add a `dev` script at the root.** Start development with `pnpm --filter <app> dev`.
+**Every app answers to `dev`.** When a framework names its development command differently, keep its name and
+alias it: `"dev": "pnpm start:dev"` in the API, `"dev": "pnpm start"` in mobile.
+
+**Give every app its own port.** The API holds 3000, so the site runs on 3200.
 
 Keep compiler options in `tsconfig.base.json` at the workspace root. Extend it by relative path from each
 app and package, overriding only what differs.
@@ -21,9 +25,17 @@ its own `biome.jsonc` with `"extends": "//"`, holding only what differs.
 What does not exist is caching, and caching pays once a build hurts, which a freshly generated workspace
 does not.
 
-The missing `dev` script is deliberate. `pnpm dev` in a workspace with four apps would start four
-processes, one of them interactive, when whoever typed it expected the app they are working on. **Its
-absence is what teaches that `dev` is per app**; if it existed, nobody would learn.
+`pnpm dev` is safe because the one-app command is just as short. Without `pnpm web` beside it, typing
+`pnpm dev` while expecting the app you work on would start four processes; with it, starting everything is a
+choice rather than an accident. The root scripts call `dev` and nothing else, which is why every app answers to
+that name: the root never needs to know how each framework spells its development command.
+
+**Mobile gives up its terminal under `pnpm dev`.** Metro starts and serves, so an open simulator connects, but
+the QR code, the `exp://` URL and the keyboard shortcuts appear only when Expo owns the terminal. When you need
+them, run `pnpm mobile` in a terminal of its own.
+
+Ports are fixed per app because `pnpm dev` starts them together, and a collision there fails only when two apps
+run at once: `next dev` defaults to 3000, which the API already holds.
 
 The other three belong at the root because that is what the pre-push hook calls. Leaving them out would
 mean each person assembling their own `--filter`, and several versions of one command.
@@ -52,8 +64,10 @@ The workspace root, and every `tsconfig.json` beneath it.
 Starting work:
 
 ```
-✅  pnpm --filter web dev
-❌  pnpm dev                    // four apps, one of them interactive
+✅  pnpm web                    // the app you are working on
+✅  pnpm dev                    // every app; mobile without its QR code
+✅  pnpm mobile                 // mobile with its QR code and shortcuts
+❌  "dev" missing from an app   // pnpm dev silently skips it
 ```
 
 Extending the base:
@@ -67,8 +81,9 @@ Extending the base:
 
 **The hook.** Pre-push runs the root `typecheck`, so a type error in any package stops the push.
 
-**Review only.** That a new app extends the base rather than copying it, and that a root `dev` script has
-not appeared.
+**Review only.** That a new app extends the base rather than copying it, answers to `dev`, runs on a port no
+other app uses, and has a root script named after it. A missing `dev` fails nothing: `pnpm -r` skips a package
+without the script, so the app simply does not start.
 
 **The reversal condition, stated so it is measurable rather than a feeling:** without caching,
 `pnpm -r typecheck` runs `tsc` in every package from scratch every time. Turborepo belongs on the table the

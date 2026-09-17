@@ -28,6 +28,17 @@ describe('composeWorkspace', () => {
     expect(biome).toMatch(/\/\/ Nest decorates constructor and handler parameters.*\n\s*"parser"/)
   })
 
+  it('gives the root one command for every app and one per app it holds', async () => {
+    const { scripts } = JSON.parse(await readFile(join(target, 'package.json'), 'utf8'))
+
+    expect(scripts.dev).toBe('node apps/api/scripts/database.mjs --check && pnpm -r --parallel dev')
+    expect(existsSync(join(target, 'apps/api/scripts/database.mjs'))).toBe(true)
+    expect(scripts.api).toBe('pnpm --filter api dev')
+    expect(scripts.web).toBe('pnpm --filter web dev')
+    expect(scripts.mobile).toBeUndefined()
+    expect(scripts.site).toBeUndefined()
+  })
+
   it('moves the contract into a package and points every import at it', async () => {
     const form = await readFile(
       join(target, 'apps/web/src/features/profile/profile-form.tsx'),
@@ -157,5 +168,32 @@ describe('copyTemplate from a published package', () => {
     expect(existsSync(join(root, 'out/gitignore'))).toBe(false)
 
     await rm(root, { recursive: true, force: true })
+  })
+})
+
+describe('every template', () => {
+  it('answers to dev, which is all the root scripts call', async () => {
+    for (const type of ['api', 'web', 'mobile', 'site']) {
+      const { scripts } = JSON.parse(await readFile(join(templates, type, 'package.json'), 'utf8'))
+
+      expect(scripts.dev, `${type} has no dev script`).toBeTypeOf('string')
+    }
+  })
+
+  it('checks the database before the API starts', async () => {
+    const { scripts } = JSON.parse(await readFile(join(templates, 'api', 'package.json'), 'utf8'))
+
+    expect(scripts.dev).toMatch(/^node scripts\/database\.mjs --check && /)
+    expect(scripts['db:setup']).toBe('node scripts/database.mjs')
+  })
+
+  it('publishes Postgres on the port .env chooses, under a name generation replaces', async () => {
+    const compose = await readFile(join(templates, 'api', 'docker-compose.yml'), 'utf8')
+
+    expect(compose).toMatch(/^name: api$/m)
+    expect(compose).toMatch(/- '\$\{POSTGRES_PORT:-5432\}:5432'/)
+    expect(await readFile(join(templates, 'api', '.env.example'), 'utf8')).toMatch(
+      /^POSTGRES_PORT=5432$/m,
+    )
   })
 })
