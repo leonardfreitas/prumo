@@ -8939,3 +8939,77 @@ search, `psql` discovery and credential prompts are removed.
 **Affects:** `templates/api/scripts/database.mjs`, `templates/api/docker-compose.yml`, `templates/api/.env.example`,
 `templates/api/README.md`, `templates/workspace/README.md`, `cli/src/generate.ts`, `cli/src/doctor.ts`,
 `cli/src/commands.ts`, `cli/src/clean.ts`, `README.md`
+
+---
+
+## 2026-09-17: `pnpm dev` settles the ports before anything starts
+
+**Decision:** every template carries `scripts/ports.mjs`, and each `dev` script runs it first. It resolves the app's
+port from `.env` — `PORT`, `WEB_PORT`, `SITE_PORT`, `METRO_PORT`, with 3000, 5173, 3200 and 8081 as fallbacks — and
+passes it to the tool: `vite --port N --strictPort`, `next dev --port N`, `expo start --port N`. The API reads `PORT`
+itself, so its check only frees the port. A workspace root runs `scripts/ports.mjs --all` before its parallel run,
+so the question is asked once rather than four times into interleaved output.
+
+When a port is taken, the script names what holds it, by command and pid, and asks: stop that process, or move this
+app. Moving writes the new port to `.env` together with every URL that followed the old one — `BETTER_AUTH_URL`,
+`VITE_API_URL` and `EXPO_PUBLIC_API_URL` for the API's port, `WEB_ORIGIN` for the web's. Stopping signals the
+process group, then the process, then `SIGKILL`, and waits for the port to actually close. Outside a terminal, or
+with `--json`, nothing is decided: `--kill` or `--change` must say which. `site` gained the `.env.example` it never
+had, so it also gets an `.env` at generation.
+
+The file is identical in `api`, `web`, `mobile`, `site` and `workspace`, and a test fails when the five copies drift.
+`lsof`, `ps`, `netstat`, `tasklist` and `taskkill` cover macOS, Linux and Windows.
+
+**Options considered:**
+- A new port: A) written to `.env`, with the URLs that depend on it; B) only for that run.
+- Scope: A) every template, including a project of one app; B) the workspace root alone.
+- Systems: A) macOS, Linux and Windows; B) macOS and Linux, with `lsof` only.
+
+**Reasoning:** A, A and A. A port that survives the run is a project that still works tomorrow, and the dependent
+URLs are exactly what a person forgets: a moved API with an old `VITE_API_URL` fails as a CORS error that names
+nothing. Checking in every template costs one file copied five times, and a workspace-only check would leave
+`pnpm web` inside a workspace unprotected.
+
+**What it costs:** five copies of one file, kept identical by a test rather than by a tool. The Windows path is
+written but untested here, and says so in `docs/OPEN-QUESTIONS.md`. `site`'s `pnpm start` still carries `--port 3200`
+in `package.json`, so the production command ignores `SITE_PORT`. Stopping a process by port kills whatever holds it,
+including something that has nothing to do with the project, which is why it is never done without naming it first.
+A moved port is not moved back when the original frees up.
+
+**Affects:** `templates/*/scripts/ports.mjs`, `templates/*/package.json`, `templates/web/.env.example`,
+`templates/mobile/.env.example`, `templates/site/.env.example`, `templates/site/.gitignore`, `templates/*/README.md`,
+`cli/src/compose.ts`
+
+---
+
+## 2026-09-17: Ctrl+C stops every process `pnpm dev` started
+
+**Decision:** `scripts/ports.mjs` wraps the dev command instead of running before it: an app's `dev` is
+`node scripts/ports.mjs -- <command>`, and a workspace root's is `node scripts/ports.mjs --all -- pnpm -r --parallel
+dev`. While the command runs, the script samples the process tree below it every two seconds, and again the moment a
+signal arrives, because a child reparented to the system no longer points at who started it. On the way out it stops
+what it remembered, waits for each port to close, and kills what is left. A process holding one of those ports that
+the script never started is named and left running.
+
+It also forwards `SIGINT` and `SIGTERM` down the tree, so a parent that signals only this process still stops the
+apps, and gives up waiting ten seconds after a signal rather than hanging on a child that refuses to go.
+
+**Why it was broken:** `pnpm -r --parallel` starts each app in a process group of its own. The terminal's Ctrl+C
+reaches pnpm and nothing under it, so `vite`, `next dev` and Metro survived, reparented to init, still holding
+3000, 3200, 5173 and 8081. Three orphaned supervisors were found on this machine, from one interrupted run.
+
+**Options considered:** A) remember the tree and stop it, touching only descendants of what was started; B) free the
+ports by killing whatever holds them; C) report what survived and let the developer kill it.
+
+**Reasoning:** A. B would have killed an unrelated server on the same port, which is exactly the accident this
+session already caused once. C leaves the problem where it started: `pnpm dev` again refuses to run because the last
+run never stopped.
+
+**What it costs:** a `ps` every two seconds for as long as `pnpm dev` runs. A Ctrl+C in the first instants may catch
+a process the script has not seen yet, though the signal-time sample makes that unlikely. The tree is remembered by
+pid, so a pid reused by the system between the sample and the shutdown would be signalled by mistake. The Windows
+path uses `taskkill /T` and a PowerShell process listing, and remains untested.
+
+**Affects:** `templates/*/scripts/ports.mjs`, `templates/api/package.json`, `templates/*/README.md`,
+`cli/src/compose.ts`, `cli/src/clean.ts`
+

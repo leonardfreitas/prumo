@@ -63,10 +63,11 @@ describe('clean', () => {
     const rootScripts = JSON.parse(await read(join(target, 'package.json'))).scripts
 
     expect(plan.items.every((item) => item.status === 'removed')).toBe(true)
-    expect(apiScripts.dev).toBe('pnpm start:dev')
+    expect(apiScripts.dev).toBe('node scripts/ports.mjs -- pnpm start:dev')
     expect(apiScripts['db:setup']).toBeUndefined()
-    expect(rootScripts.dev).toBe('pnpm -r --parallel dev')
-    expect(existsSync(join(api, 'scripts'))).toBe(false)
+    expect(rootScripts.dev).toBe('node scripts/ports.mjs --all -- pnpm -r --parallel dev')
+    expect(existsSync(join(api, 'scripts/database.mjs'))).toBe(false)
+    expect(existsSync(join(api, 'scripts/ports.mjs')), 'the ports check is not one-time').toBe(true)
     expect(await read(join(api, '.env.example'))).toMatch(
       /^DATABASE_URL=postgresql:\/\/app:app@localhost:5432\/app$/m,
     )

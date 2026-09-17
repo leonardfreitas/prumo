@@ -6,7 +6,7 @@
     "build": "nest build",
     "start": "nest start",
     "start:dev": "nest start --watch",
-    "dev": "node scripts/database.mjs --check && pnpm start:dev",
+    "dev": "node scripts/database.mjs --check && node scripts/ports.mjs -- pnpm start:dev",
     "start:prod": "node dist/main",
     "lint": "biome check",
     "typecheck": "tsc --noEmit",

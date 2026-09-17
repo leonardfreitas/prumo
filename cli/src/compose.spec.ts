@@ -31,7 +31,10 @@ describe('composeWorkspace', () => {
   it('gives the root one command for every app and one per app it holds', async () => {
     const { scripts } = JSON.parse(await readFile(join(target, 'package.json'), 'utf8'))
 
-    expect(scripts.dev).toBe('node apps/api/scripts/database.mjs --check && pnpm -r --parallel dev')
+    expect(scripts.dev).toBe(
+      'node apps/api/scripts/database.mjs --check && node scripts/ports.mjs --all -- pnpm -r --parallel dev',
+    )
+    expect(existsSync(join(target, 'scripts/ports.mjs'))).toBe(true)
     expect(existsSync(join(target, 'apps/api/scripts/database.mjs'))).toBe(true)
     expect(scripts.api).toBe('pnpm --filter api dev')
     expect(scripts.web).toBe('pnpm --filter web dev')
@@ -177,6 +180,37 @@ describe('every template', () => {
       const { scripts } = JSON.parse(await readFile(join(templates, type, 'package.json'), 'utf8'))
 
       expect(scripts.dev, `${type} has no dev script`).toBeTypeOf('string')
+    }
+  })
+
+  it('checks its port before it starts, from one script every template carries', async () => {
+    const copies = await Promise.all(
+      ['api', 'web', 'mobile', 'site', 'workspace'].map((template) =>
+        readFile(join(templates, template, 'scripts', 'ports.mjs'), 'utf8'),
+      ),
+    )
+
+    expect(new Set(copies).size, 'the copies of ports.mjs have drifted apart').toBe(1)
+
+    for (const type of ['api', 'web', 'mobile', 'site']) {
+      const { scripts } = JSON.parse(await readFile(join(templates, type, 'package.json'), 'utf8'))
+
+      expect(scripts.dev, `${type} starts without checking its port`).toContain('scripts/ports.mjs')
+    }
+  })
+
+  it('names its port in .env.example, which is where the check reads it', async () => {
+    const ports: Record<string, string> = {
+      api: 'PORT=3000',
+      web: 'WEB_PORT=5173',
+      site: 'SITE_PORT=3200',
+      mobile: 'METRO_PORT=8081',
+    }
+
+    for (const [type, line] of Object.entries(ports)) {
+      const example = await readFile(join(templates, type, '.env.example'), 'utf8')
+
+      expect(example, `${type} does not declare its port`).toContain(line)
     }
   })
 

@@ -19,7 +19,16 @@ starts Postgres from `docker-compose.yml` on port 5432 or the next free one (kep
 into `.env`, and migrates. `pnpm db:setup` does the same at any time. Without a terminal every answer comes from a
 flag: `--name`, `--port`, `--skip-migrate`, and `--json` for one JSON result on stdout.
 
-The API listens on `http://localhost:3000`. Outside production, its documentation is at `/api/docs`.
+The API listens on the port in `PORT`, `http://localhost:3000` by default. Outside production, its documentation is
+at `/api/docs`.
+
+Before it starts, `pnpm dev` checks that the port is free. When something else holds it, it says what does, by
+name and pid, and asks whether to stop that process or to move this app to the next free port. Moving it writes the
+new port to `.env`, along with every URL that pointed at the old one. Without a terminal, pass `--kill` or
+`--change` to `scripts/ports.mjs`, or the command stops rather than choosing for you.
+
+Ctrl+C stops everything `pnpm dev` started, not only what the terminal signals: the script remembers the processes
+it spawned, stops them, and frees the port. Anything it did not start is named and left alone.
 
 `pnpm db:migrate` builds first, then runs Better Auth's migrations and then the application's. Before
 migrating, Better Auth logs `Database schema mismatch` because its tables do not exist yet; the migration
