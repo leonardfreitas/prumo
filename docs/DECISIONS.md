@@ -8796,3 +8796,109 @@ its `BETTER_AUTH_SECRET` line; generation fails loudly if the line disappears.
 
 **Affects:** `cli/src/generate.ts`, `templates/api/README.md`, `templates/web/README.md`,
 `templates/mobile/README.md`
+
+---
+
+## 2026-09-17: The API template creates its own development database, and `pnpm dev` offers to
+
+**Decision:** `templates/api/.env.example` ships `DATABASE_URL=MISSING` and `AUTH_DATABASE_URL=MISSING`. The API
+template carries `scripts/database.mjs`, which has no dependency and is run by `pnpm db:setup`, by `prumo db`, and,
+with `--check`, at the start of the API's `dev` script and of a workspace root's `dev`. While the URL is `MISSING`,
+the check asks whether to create a database and its name. The script uses a Postgres answering on `localhost:5432`
+through `psql`, which it also finds where the EDB installer, Postgres.app and a keg-only Homebrew formula leave it
+off `PATH`. It tries the current OS user and asks for a user and password when refused. Without a local server, it
+offers the Docker service in `docker-compose.yml`. It requires Postgres 18, creates the database (reusing one that
+exists), applies `docker/init/*.sql` so both servers get the `auth` schema, writes both URLs into `.env`, and runs
+`pnpm db:migrate`. Outside a terminal, or with `--json`, it never asks: a missing answer is an error.
+
+**Options considered:**
+- Where the logic lives: A) a script in the template, which `prumo db` only runs; B) the CLI, with `predev` calling
+  `prumo db --check`.
+- Which server: A) local first, then Docker; B) local only; C) local only, dropping the Docker service.
+- How to create it: A) `psql`, falling back to asking for credentials; B) the `pg` driver from Node.
+
+**Reasoning:** A, A and A. A generated project must run without Prumo on `PATH`: the Desktop embeds the CLI rather
+than installing it, and a teammate who clones the project never installed it. Keeping Docker as the fallback leaves
+the path that already worked intact for anyone without a local Postgres. `psql` works before `pnpm install`, and
+lets a local superuser who needs no password pass without a question; the `pg` driver would need the install and
+always ask.
+
+**The workspace root runs the check before its parallel run,** not only inside the API's `dev`: a question asked
+inside `pnpm -r --parallel` is buried in the other apps' interleaved output. The API's own check then finds a URL
+and does nothing.
+
+**What it costs:** `MISSING` passes the API's own validation, so starting the API with `nest start` directly rather
+than `pnpm dev` fails at connection rather than at validation. The list of places `psql` is looked for is written
+twice, in the template script and in `prumo doctor`, because neither package can import the other. The logic ships
+inside every generated project, so a fix reaches existing projects only by hand. `docker/init/` is now read by two
+things, and a script placed there must stay valid on a server Docker did not initialise.
+
+**Amends:** "`.env` is ignored, `.env.example` is committed, production reads neither", whose example held a working
+sample URL.
+
+**Affects:** `templates/api/scripts/database.mjs`, `templates/api/package.json`, `templates/api/.env.example`,
+`templates/api/README.md`, `templates/workspace/README.md`, `cli/src/compose.ts`, `cli/src/database.ts`,
+`cli/scripts/verify.mjs`
+
+---
+
+## 2026-09-17: The CLI answers `help`, `version`, `doctor` and `db`, and every command takes `--json`
+
+**Decision:** besides `new`, the CLI has `help [command]` (also `--help`, `-h`, and `<command> --help`), `version`
+(also `--version`, `-v`), `doctor` and `db`. Bare `prumo` prints the help. `doctor` checks Node against its floor,
+`pnpm` and `git` as required, and Docker (installed apart from running), `psql`, a server on `localhost:5432`, and
+whether either route to a database exists, as warnings. It exits 1 only when a required check fails.
+
+With `--json`, stdout carries exactly one document: `{ ok: true, command, data }` or
+`{ ok: false, command, error: { code, message } }`, with `data` also present on a failed `doctor`. Nothing is asked,
+and the output of `git`, `pnpm install`, `docker` and migrations goes to stderr. The exit code is 0 exactly when
+`ok` is true. Error codes are strings such as `usage`, `unknown_command`, `needs_input`, `invalid_input`,
+`target_not_empty`, `not_a_project`, `no_api` and `not_ready`; `db` adds its own, from the script.
+
+**Options considered:**
+- A) One final JSON document per run, progress on stderr.
+- B) NDJSON: one line per step, then a result line.
+
+**Reasoning:** A. The Desktop needs a result it can trust more than a live feed, and one document is simple to parse
+and to test; stderr still carries the human log for anyone who wants to show it. B is a larger contract to keep
+stable, for a progress bar nobody has designed yet.
+
+**What it costs:** the Desktop cannot show which step `new` is on, only its raw log. Error codes are now a contract,
+so renaming one is a breaking change.
+
+**Affects:** `cli/src/cli.ts`, `cli/src/commands.ts`, `cli/src/doctor.ts`, `cli/src/output.ts`,
+`cli/src/database.ts`, `cli/src/questions.ts`, `cli/src/generate.ts`, `README.md`
+
+---
+
+## 2026-09-17: `prumo clean` removes what a project needed only once
+
+**Decision:** `prumo clean` removes the database bootstrap from a generated project: `scripts/database.mjs`, the
+`db:setup` script, the `--check` prefix on the API's and the workspace root's `dev`, the README text describing them,
+and the `MISSING` block in `.env.example`, which becomes the sample URL of `docker-compose.yml` again. It lists what
+it will do and asks; without a terminal or with `--json` it needs `--yes`, and `--dry-run` only lists. It refuses
+while `.env` still holds `DATABASE_URL=MISSING`, unless `--force`.
+
+Each item is recognised by the exact text the CLI generates, and the script by the exact content of the template the
+running CLI ships. Anything changed since generation is reported as `modified` and kept. Running it twice finds
+everything `absent`. A project with no API has nothing to clean.
+
+**Nothing else qualifies today.** `.githooks/install.mjs` looks one-time but runs on every clone through `prepare`,
+and `docker/init/` runs whenever the Docker volume is recreated.
+
+**Options considered:**
+- `.env.example` after cleaning: A) the sample URL comes back; B) `MISSING` stays.
+- Recognising items: A) a list in the CLI, matching exact text; B) a manifest written into `.prumo/` at generation.
+- Safety: A) list, confirm, and refuse while `MISSING`; B) list and confirm only.
+
+**Reasoning:** A, A and A. Without the script, `MISSING` is a value nothing explains, while the sample URL works
+with the service the project already carries. Exact matching needs no new file, and a manifest would be one more
+contract for the Desktop to read and for projects generated before it to lack. Cleaning before the database exists
+removes the only help for creating it, which is almost certainly a mistake.
+
+**What it costs:** the list and the templates are two homes for the same text; `clean.spec.ts` generates projects
+and expects every item `pending`, so a template change that breaks the match fails loudly. A project generated by
+an older CLI whose script differs from the current template keeps its script, reported as `modified`. After cleaning,
+`prumo db` no longer works in that project.
+
+**Affects:** `cli/src/clean.ts`, `cli/src/cli.ts`, `cli/src/commands.ts`, `cli/src/database.ts`, `README.md`

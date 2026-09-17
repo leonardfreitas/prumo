@@ -7,6 +7,7 @@ import { type AppType, composeWorkspace, copyTemplate } from './compose.ts'
 import { type Answers, writeContext } from './context.ts'
 import { setJsonc } from './jsonc.ts'
 import { schemeFor } from './names.ts'
+import { CliError } from './output.ts'
 
 async function rewrite(path: string, change: (text: string) => string): Promise<void> {
   await writeFile(path, change(await readFile(path, 'utf8')))
@@ -48,8 +49,14 @@ async function writeLocalEnv(app: string, type: AppType): Promise<void> {
   await writeFile(join(app, '.env'), env)
 }
 
-function run(command: string, args: string[], cwd: string): void {
-  const result = spawnSync(command, args, { cwd, stdio: 'inherit' })
+export type ChildOutput = 'inherit' | 'stderr'
+
+function run(command: string, args: string[], cwd: string, output: ChildOutput): void {
+  // Under --json stdout belongs to the result document, so a child's output goes to stderr instead.
+  const result = spawnSync(command, args, {
+    cwd,
+    stdio: output === 'inherit' ? 'inherit' : ['ignore', 2, 2],
+  })
 
   if (result.status !== 0) {
     throw new Error(`${command} ${args.join(' ')} failed in ${cwd}`)
@@ -62,15 +69,17 @@ export async function generate({
   target,
   answers,
   install,
+  childOutput = 'inherit',
 }: {
   templates: string
   knowledge: string
   target: string
   answers: Answers
   install: boolean
+  childOutput?: ChildOutput
 }): Promise<void> {
   if (existsSync(target) && (await readdir(target)).length > 0) {
-    throw new Error(`${target} already exists and is not empty.`)
+    throw new CliError('target_not_empty', `${target} already exists and is not empty.`)
   }
 
   const [only] = answers.types
@@ -103,11 +112,11 @@ export async function generate({
 
   await writeContext(knowledge, target, answers)
 
-  run('git', ['init', '--quiet'], target)
+  run('git', ['init', '--quiet'], target, childOutput)
 
   if (install) {
-    run('pnpm', ['install'], target)
+    run('pnpm', ['install'], target, childOutput)
     // Rewriting the contract import changes import grouping and line length; only the formatter can settle both.
-    run('pnpm', ['exec', 'biome', 'check', '--write'], target)
+    run('pnpm', ['exec', 'biome', 'check', '--write'], target, childOutput)
   }
 }

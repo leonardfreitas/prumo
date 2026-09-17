@@ -62,8 +62,11 @@ function compose(api, ...args) {
 
 function apiEnv(api) {
   const example = readFileSync(join(api, '.env.example'), 'utf8')
+  // The compose service's own database: scripts/database.mjs is what a person runs, and it asks questions.
+  const url = `postgresql://app:app@localhost:${dbPort}/app`
   const env = example
-    .replaceAll('localhost:5432', `localhost:${dbPort}`)
+    .replace(/^DATABASE_URL=.*$/m, `DATABASE_URL=${url}`)
+    .replace(/^AUTH_DATABASE_URL=.*$/m, `AUTH_DATABASE_URL=${url}`)
     .replace(/^BETTER_AUTH_SECRET=.*$/m, `BETTER_AUTH_SECRET=${'v'.repeat(40)}`)
   writeFileSync(join(api, '.env'), env)
 }

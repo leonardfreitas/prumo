@@ -2,7 +2,7 @@
 
 ## Requirements
 
-Node 22.17 or later, pnpm, and Docker for the API.
+Node 22.17 or later and pnpm. For the API, PostgreSQL 18 on this machine or Docker; its tests need Docker.
 
 ## Layout
 
@@ -22,7 +22,7 @@ Node 22.17 or later, pnpm, and Docker for the API.
 
 ## Trying it
 
-With the API migrated, run `pnpm dev`. If the workspace holds `web`, open `http://localhost:5173`: you are sent to
+Run `pnpm dev`. If the workspace holds `api` and its database is not set up yet, it offers to create one first. If the workspace holds `web`, open `http://localhost:5173`: you are sent to
 sign in, and **Sign up** creates an account and takes you to your profile. Each app's README says what it needs
 before it starts.
 
