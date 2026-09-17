@@ -22,9 +22,13 @@ Node 22.17 or later and pnpm. For the API, Docker Desktop running: its database 
 
 ## Trying it
 
-Run `pnpm dev`. If the workspace holds `api` and its database is not set up yet, it offers to create one first. If the workspace holds `web`, open `http://localhost:5173`: you are sent to
-sign in, and **Sign up** creates an account and takes you to your profile. Each app's README says what it needs
-before it starts.
+Run `pnpm dev`. It first checks that every app's port is free, offering to stop whatever holds one or to move that
+app to another port. Ctrl+C stops every app it started, and the ports it used are free again.
+
+If the workspace holds `api` and its database is not set up yet, `pnpm dev` offers to create the database first.
+
+If the workspace holds `web`, open `http://localhost:5173`: you are sent to sign in, and **Sign up** creates an
+account and takes you to your profile. Each app's README says what it needs before it starts.
 
 ## Conventions
 

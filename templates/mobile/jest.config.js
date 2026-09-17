@@ -12,6 +12,10 @@ if (!nodeModules.includes('(?!(') || babel === undefined) {
 module.exports = {
   preset: 'jest-expo',
   moduleNameMapper: { '^@/(.*)$': '<rootDir>/src/$1' },
+  // A first render brings React Native and Babel's transform with it, which costs seconds on a cold cache: inside a
+  // workspace the contract is a package to transform too, and Jest's 5s default was crossed in CI while the same
+  // suite passed alone. The budget is the machine's slowness, not the test's.
+  testTimeout: 30_000,
   // Better Auth ships ESM only, partly as .mjs, so it joins the packages jest-expo transforms, with the same Babel.
   transform: { '\\.mjs$': babel },
   transformIgnorePatterns: [

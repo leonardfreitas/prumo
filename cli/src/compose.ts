@@ -308,12 +308,12 @@ export async function composeWorkspace({
   }
 
   // One command for everything and one per app. Each app answers to `dev`, so the root never needs to know how.
-  // The API's database check is the exception: it may ask a question, which the interleaved output of a parallel
-  // run would bury, so the root asks it first and the API's own check then finds nothing to do.
-  const parallelDev = 'pnpm -r --parallel dev'
-  const dev = types.includes('api')
-    ? `node apps/api/scripts/database.mjs --check && ${parallelDev}`
-    : parallelDev
+  // The database and the ports are the exception: both may ask a question, which the interleaved output of a
+  // parallel run would bury, so the root asks first and each app's own check then finds nothing to do.
+  // `pnpm -r --parallel` starts each app in its own process group, so Ctrl+C reaches pnpm and leaves the apps
+  // running. The ports script wraps the run, remembers what it started, and stops all of it on the way out.
+  const database = types.includes('api') ? 'node apps/api/scripts/database.mjs --check && ' : ''
+  const dev = `${database}node scripts/ports.mjs --all -- pnpm -r --parallel dev`
 
   await rewriteText(join(target, 'package.json'), (text) =>
     types.reduce(

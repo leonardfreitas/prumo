@@ -8939,3 +8939,426 @@ search, `psql` discovery and credential prompts are removed.
 **Affects:** `templates/api/scripts/database.mjs`, `templates/api/docker-compose.yml`, `templates/api/.env.example`,
 `templates/api/README.md`, `templates/workspace/README.md`, `cli/src/generate.ts`, `cli/src/doctor.ts`,
 `cli/src/commands.ts`, `cli/src/clean.ts`, `README.md`
+
+---
+
+## 2026-09-17: `pnpm dev` settles the ports before anything starts
+
+**Decision:** every template carries `scripts/ports.mjs`, and each `dev` script runs it first. It resolves the app's
+port from `.env` — `PORT`, `WEB_PORT`, `SITE_PORT`, `METRO_PORT`, with 3000, 5173, 3200 and 8081 as fallbacks — and
+passes it to the tool: `vite --port N --strictPort`, `next dev --port N`, `expo start --port N`. The API reads `PORT`
+itself, so its check only frees the port. A workspace root runs `scripts/ports.mjs --all` before its parallel run,
+so the question is asked once rather than four times into interleaved output.
+
+When a port is taken, the script names what holds it, by command and pid, and asks: stop that process, or move this
+app. Moving writes the new port to `.env` together with every URL that followed the old one — `BETTER_AUTH_URL`,
+`VITE_API_URL` and `EXPO_PUBLIC_API_URL` for the API's port, `WEB_ORIGIN` for the web's. Stopping signals the
+process group, then the process, then `SIGKILL`, and waits for the port to actually close. Outside a terminal, or
+with `--json`, nothing is decided: `--kill` or `--change` must say which. `site` gained the `.env.example` it never
+had, so it also gets an `.env` at generation.
+
+The file is identical in `api`, `web`, `mobile`, `site` and `workspace`, and a test fails when the five copies drift.
+`lsof`, `ps`, `netstat`, `tasklist` and `taskkill` cover macOS, Linux and Windows.
+
+**Options considered:**
+- A new port: A) written to `.env`, with the URLs that depend on it; B) only for that run.
+- Scope: A) every template, including a project of one app; B) the workspace root alone.
+- Systems: A) macOS, Linux and Windows; B) macOS and Linux, with `lsof` only.
+
+**Reasoning:** A, A and A. A port that survives the run is a project that still works tomorrow, and the dependent
+URLs are exactly what a person forgets: a moved API with an old `VITE_API_URL` fails as a CORS error that names
+nothing. Checking in every template costs one file copied five times, and a workspace-only check would leave
+`pnpm web` inside a workspace unprotected.
+
+**What it costs:** five copies of one file, kept identical by a test rather than by a tool. The Windows path is
+written but untested here, and says so in `docs/OPEN-QUESTIONS.md`. `site`'s `pnpm start` still carries `--port 3200`
+in `package.json`, so the production command ignores `SITE_PORT`. Stopping a process by port kills whatever holds it,
+including something that has nothing to do with the project, which is why it is never done without naming it first.
+A moved port is not moved back when the original frees up.
+
+**Affects:** `templates/*/scripts/ports.mjs`, `templates/*/package.json`, `templates/web/.env.example`,
+`templates/mobile/.env.example`, `templates/site/.env.example`, `templates/site/.gitignore`, `templates/*/README.md`,
+`cli/src/compose.ts`
+
+---
+
+## 2026-09-17: Ctrl+C stops every process `pnpm dev` started
+
+**Decision:** `scripts/ports.mjs` wraps the dev command instead of running before it: an app's `dev` is
+`node scripts/ports.mjs -- <command>`, and a workspace root's is `node scripts/ports.mjs --all -- pnpm -r --parallel
+dev`. While the command runs, the script samples the process tree below it every two seconds, and again the moment a
+signal arrives, because a child reparented to the system no longer points at who started it. On the way out it stops
+what it remembered, waits for each port to close, and kills what is left. A process holding one of those ports that
+the script never started is named and left running.
+
+It also forwards `SIGINT` and `SIGTERM` down the tree, so a parent that signals only this process still stops the
+apps, and gives up waiting ten seconds after a signal rather than hanging on a child that refuses to go.
+
+**Why it was broken:** `pnpm -r --parallel` starts each app in a process group of its own. The terminal's Ctrl+C
+reaches pnpm and nothing under it, so `vite`, `next dev` and Metro survived, reparented to init, still holding
+3000, 3200, 5173 and 8081. Three orphaned supervisors were found on this machine, from one interrupted run.
+
+**Options considered:** A) remember the tree and stop it, touching only descendants of what was started; B) free the
+ports by killing whatever holds them; C) report what survived and let the developer kill it.
+
+**Reasoning:** A. B would have killed an unrelated server on the same port, which is exactly the accident this
+session already caused once. C leaves the problem where it started: `pnpm dev` again refuses to run because the last
+run never stopped.
+
+**What it costs:** a `ps` every two seconds for as long as `pnpm dev` runs. A Ctrl+C in the first instants may catch
+a process the script has not seen yet, though the signal-time sample makes that unlikely. The tree is remembered by
+pid, so a pid reused by the system between the sample and the shutdown would be signalled by mistake. The Windows
+path uses `taskkill /T` and a PowerShell process listing, and remains untested.
+
+**Affects:** `templates/*/scripts/ports.mjs`, `templates/api/package.json`, `templates/*/README.md`,
+`cli/src/compose.ts`, `cli/src/clean.ts`
+
+---
+
+## 2026-09-17: Landing a version bump on main publishes to npm
+
+**Decision:** `ci.yml` gained a `publish` job. On a push to `main`, after `repository`, `packaged` and `generated`
+have all passed, it compares the version in `cli/package.json` with the versions the registry already holds. When
+the version is new it runs `npm publish --access public`; when it is not, it says so and stops. Releasing is
+therefore a commit that raises the version, with no tag and no release to create by hand.
+
+Authentication is npm's trusted publishing: the job asks for `id-token: write` and npm mints a short-lived token
+from it, so the repository keeps no npm secret. The job installs `npm@latest` first, because trusted publishing
+needs npm 11.5.1 or later and the npm bundled with Node may be older. Provenance needs no flag: npm attaches it for
+a public package published from a public repository through OIDC.
+
+**Options considered:**
+- Trigger: A) a version change on `main`; B) pushing a `v*` tag; C) creating a GitHub Release.
+- Authentication: A) trusted publishing through OIDC; B) an `NPM_TOKEN` secret.
+- Gate: A) the whole CI, matrix included; B) only the fast checks.
+
+**Reasoning:** A, A and A. A version bump is already the commit that decides a release, and comparing against the
+registry makes the job idempotent: every other push to `main` is a no-op instead of a failure. The token approach
+had already broken once in practice, with an expired credential answering `404` on a scoped package, and a secret
+in the repository is usable by any workflow in it. The matrix is the only thing that proves a generated project
+runs, so a version that has not passed it has no business on npm.
+
+**What it costs:** a release waits for the full matrix, which takes many minutes and needs Docker. Forgetting the
+bump publishes nothing and says nothing, which is quiet in both directions. Trusted publishing must be configured
+once on npmjs.com against the workflow filename, so renaming `ci.yml` breaks publishing until the setting follows.
+Publishing lives in the same workflow as the checks, so that file now carries the credential-bearing permission.
+
+**Affects:** `.github/workflows/ci.yml`, `README.md`
+
+---
+
+## 2026-09-17: The mobile suite gets a 30s test timeout
+
+**Decision:** `templates/mobile/jest.config.js` declares `testTimeout: 30_000`, with the reason written above it.
+
+**Why:** in CI, `ProfileForm › puts a server validation message on the field it names` crossed Jest's 5s default and
+failed the `everything` matrix, while the same test passed in a project holding only `mobile`. The suite takes
+6.4s alone and 14.1s inside a workspace, where the contract is a package Babel transforms as well. Locally the whole
+suite finishes in 8.5s, so nothing was wrong with the test: the budget was the machine's slowness.
+
+**Options considered:** A) `testTimeout` for the mobile suite; B) a third argument on that one `it`; C) make the
+suite faster before changing any limit.
+
+**Reasoning:** A. A first React Native render costs seconds on a cold cache, so the next test that renders a form
+would meet the same wall and cost somebody the same investigation. One limit, in one place, with the reason beside
+it. B fixes one line and leaves the trap. C is worth doing on its own, but it is not what a template needs to be
+correct: a test that fails only on a slow machine is a flaky test, not a fast one.
+
+**What it costs:** a genuinely hung mobile test now takes 30 seconds to report instead of 5. The verified numbers
+sit in the comment, so a future reader can tell the limit was measured rather than guessed.
+
+**Affects:** `templates/mobile/jest.config.js`
+
+---
+
+## 2026-09-17: Prumo's own website is a `site` project, generated by Prumo
+
+**Decision:** the public website for Prumo and Prumo Desktop is built with Next on the App Router, and it is not
+written by hand: it is generated by `prumo new prumo-site --types site --single-tenant`, so it arrives with the App
+Router, Tailwind, shadcn on Base UI, Biome, Vitest, the `.githooks` and its own `.prumo/` folder, exactly as any
+user's `site` project would.
+
+**Options considered:**
+- A) Next, generated by `prumo new --types site`.
+- B) Next, written from scratch outside the generator.
+- C) Astro.
+
+**Reasoning:** A. `docs/stack.md` already answers this question for everyone else: a public page that has to be
+indexed is a `site`, and a `site` is Next on the App Router, decided on 2026-09-11. Prumo's website is that page.
+Building it on anything else means the project's own shop window contradicts the choice it sells, and the first
+question any technical visitor asks is why Prumo does not use its own template. B keeps the framework but throws
+away the point: generating it makes the website the first non-trivial use of the `site` template, well past the
+static home page its test covers, so every friction found is a real defect in the template rather than an opinion
+about it.
+
+**C is the better tool in isolation and still loses:** Astro ships less JavaScript by default, has content
+collections and MDX built in, and is designed for exactly this kind of content site. For a site of this size the
+difference is small, and it costs coherence, which is the one thing a project whose thesis is *the decisions are
+already made and written down* cannot spend.
+
+**What A costs:** MDX is not in the template, so it has to be wired with `@next/mdx` and that wiring becomes a
+decision of its own. Search has no answer yet; Pagefind over the static output is the candidate. A React tree is
+shipped where Astro would have shipped islands. And the website inherits the template's pins, so a dependency the
+site wants and the template does not have is a change to one of them, not a free install.
+
+**Affects:** `stjosephworks/prumo-site`. `docs/stack.md` is unchanged, because this decision applies an
+existing entry rather than adding one.
+
+---
+
+## 2026-09-17: The website lives in its own repository, `prumo-site`
+
+**Decision:** the website is `stjosephworks/prumo-site`, a repository of its own, holding one `site` project and
+nothing else. It documents both Prumo and Prumo Desktop, and belongs to neither of their repositories.
+
+**Options considered:**
+- A) Its own repository.
+- B) A `site/` folder inside `prumo`.
+- C) `prumo` turned into a workspace holding `cli/` and `site/`.
+
+**Reasoning:** A. The website documents two products, so putting it inside either one makes it a guest in a
+repository whose release cycle has nothing to do with it. `prumo`'s CI is the long matrix that generates and runs
+every template and needs Docker, and a push to `main` there is what publishes the CLI to npm; fixing a typo on a
+marketing page has no business waiting for that, and no business sharing a branch with the commit that decides a
+release. B and C also put an application inside the package that is published, which the build and the npm files
+list would then have to exclude.
+
+**What A costs:** the documentation the site renders lives in two other repositories, so the site either copies it
+or reads it at build time. That is now a decision the split has forced, rather than one it could avoid. A change
+that touches the CLI and its documentation page becomes two pull requests in two repositories, and the site can
+describe a version of the CLI that is no longer the published one without anything failing.
+
+**Affects:** `stjosephworks/prumo-site`
+
+---
+
+## 2026-09-17: The website reads the documents it does not own, and writes only what has no home
+
+**Decision:** every document the website shows has exactly one home. The documents `prumo` and `prumo-desktop`
+already own, their `README.md`, `docs/stack.md`, `docs/structure.md`, `docs/DECISIONS.md` and
+`docs/OPEN-QUESTIONS.md`, are read from those repositories and rendered, never retyped in the site. The website
+writes, and therefore owns, only what exists nowhere today: the getting-started path, the explanation of what
+`.prumo/` is to someone meeting it for the first time, and a browsable command reference.
+
+**Options considered:**
+- A) One home per document: read what the repositories own, write what has no home.
+- B) The site is purely a renderer of the existing files.
+- C) The site authors its own documentation, written for the web.
+
+**Reasoning:** A. `CLAUDE.md` §9 already forbids C in the repository's own words: two sources of one truth always
+diverge, and it is the summary that goes stale. The site's copy would be the summary. B avoids that failure and
+creates another: those files were written for someone already inside the project, and a visitor who arrives cold
+meets a README and a 476 KB list of decisions with no path through them. What is missing is not a second telling of
+the stack, it is the route in, and that route has no home yet.
+
+**What A costs:** the build depends on two repositories it does not control, so a file renamed there breaks the
+site here, and it breaks at build rather than at review. The boundary also has to be held by hand: the first time
+someone explains the stack inside a getting-started page instead of linking to `stack.md`, the rule is broken and
+nothing detects it.
+
+**Affects:** `stjosephworks/prumo-site`
+
+---
+
+## 2026-09-17: The website fetches the documents at build time, from a manifest pinned by commit
+
+**Decision:** a manifest in the site lists each document it renders, one entry per file: the repository, the path,
+the commit it is pinned to, and the route it becomes. A script run before the build downloads exactly those files
+from `raw.githubusercontent.com` into an ignored folder. A file that does not answer fails the build. Raising a pin
+is a commit in `prumo-site`, which is also what rebuilds and redeploys the site, so no webhook is needed from the
+other repositories.
+
+**Options considered:**
+- A) A fetch script driven by a manifest, pinned by commit.
+- B) Git submodules for both repositories.
+- C) The source repositories' CI copying the files into `prumo-site` and committing them.
+
+**Reasoning:** A. The site needs roughly ten files out of two whole repositories, and the manifest that names them
+is also the list of pages, so one file answers both what is rendered and where it came from. B pays a full clone of
+both repositories for one `docs/` folder each, and puts `--recursive` between a contributor and a working checkout.
+C is the only one that builds without a network, and it is the one §9 warns about: generated copies sitting in the
+repository look editable, and the first hand-edit to one of them is undetectable.
+
+**A note on pinning:** there is no tag to pin to. Releasing the CLI is a version bump landing on `main`, decided
+earlier today, with no tag and no GitHub release, so the only references that exist are commit SHAs and `main`
+itself. Pinning by commit is therefore the only way the site can state which version of Prumo it is describing.
+
+**What A costs:** the build needs the network and depends on GitHub being up, which means a deploy can fail for a
+reason that has nothing to do with the change being deployed. The pins are raised by hand, so the site keeps
+describing an older Prumo until someone remembers, and nothing warns that it has fallen behind. The manifest is
+also maintained by hand: a document added to `docs/` in either repository stays invisible until it is listed.
+
+**Affects:** `stjosephworks/prumo-site`
+
+---
+
+## 2026-09-17: The website ships without a Desktop download, and says why
+
+**Decision:** version 1 of the website has no download button for Prumo Desktop. The home page's one action is the
+CLI's install command, copyable, because that is the thing a visitor can actually use today. Prumo Desktop gets a
+page that states what it is, what already runs, what is not built yet and that the first public build is still
+ahead, linking to its repository. The button appears when there is a signed and notarised build to point at, and it
+will read the latest release from GitHub's API at build time rather than hard-coding a URL.
+
+**Options considered:**
+- A) No button in v1, with the Desktop's state stated plainly.
+- B) Hold the website until `prumo-desktop` can produce a signed release.
+- C) A button leading to clone-and-run instructions.
+
+**Reasoning:** A. `prumo-desktop` has no tags, no releases, and no `makers` configured in `forge.config.js`; the
+only artefact that exists is an unpackaged `out/Prumo Desktop-darwin-arm64` from a local build. There is nothing for
+a button to point at, and a site whose central promise is that decisions are written down honestly cannot open with
+one that is not true. B blocks a website the CLI is ready for on work belonging to another repository. C calls a
+development checkout a download.
+
+**What A costs:** the site launches advertising two products and letting a visitor use one, which is a weaker first
+impression than the one a finished Desktop would give. Announcing the Desktop before it can be installed also
+spends attention early, and some of those visitors will not come back when it ships.
+
+**Affects:** `stjosephworks/prumo-site`, and later `prumo-desktop`'s release pipeline
+
+---
+
+## 2026-09-17: The website is bilingual, and only what it writes is translated
+
+**Decision:** the website serves English and Portuguese, under `/en` and `/pt`. Only the pages the site itself owns
+are translated: the home page, the getting-started path, the explanation of `.prumo/`, the command reference and
+the Prumo Desktop page. The documents fetched from `prumo` and `prumo-desktop` are rendered in English on both
+sides, each carrying one line saying it lives in the repository and is maintained in English.
+
+**Options considered:**
+- Language: A) English only; B) Portuguese only; C) both, with i18n routing.
+- What `/pt` does with the fetched documents: A) renders them in English with a notice; B) sends the reader to
+  `/en` for the whole reference section; C) translates them too.
+
+**Reasoning:** C for the language, chosen by the architect over a recommendation of English only. The audience
+Prumo reaches first is Brazilian, and the route in, which is the part the site owns, is worth having in the reader's
+own language; the recommendation had weighed consistency with `CLAUDE.md` §2 above that, and the call is the
+architect's.
+
+A for the documents. Translating them would rebuild, in a second language, exactly the duplication the decision
+taken minutes earlier removed, and `DECISIONS.md` alone is 476 KB that would fall behind on its first commit
+upstream. Sending the reader to `/en` for the whole reference was the honest alternative and was rejected as the
+harsher one: it drops the reader out of their language by navigation rather than by a stated note.
+
+**This scopes `CLAUDE.md` §2, and the scoping has to be written down.** §2 says every file written into the
+repository is English, and it governs `prumo`. `prumo-site` is a different repository and carries its own rule:
+Portuguese is allowed, in the translated content only, and every identifier, comment and commit message stays
+English. Without that written where the site is worked on, the next assistant reading §2 will correct the
+Portuguese back.
+
+**What it costs:** every site-owned page is written twice, and the second language is the one nobody proofreads, so
+it goes stale first; that is the §9 failure mode reappearing between languages instead of between repositories. A
+reader browsing in Portuguese also changes language mid-journey the moment they follow a link into the reference,
+which a note explains but does not remove. Adding a page now means adding two.
+
+**Affects:** `stjosephworks/prumo-site`
+
+---
+
+## 2026-09-17: The website is hosted on Vercel
+
+**Decision:** `prumo-site` deploys to Vercel, connected to the repository, with a preview deployment per pull
+request and `main` as production. The site is not forced into `output: 'export'`.
+
+**Options considered:**
+- A) Vercel.
+- B) GitHub Pages with `output: 'export'`.
+- C) Cloudflare Pages.
+
+**Reasoning:** A. The `site` template is a plain Next application on the defaults, and Vercel runs it with nothing
+configured. A documentation site is reviewed by looking at it, not by reading its diff, and a preview URL per pull
+request is the only one of the three that gives that without extra wiring. It also leaves the door open for the day
+the Desktop download reads GitHub's latest release, which under a static export would need a scheduled rebuild.
+
+**B was close, and this is what decided against it:** everything the site shows changes only by a commit, because
+the documents are pinned by SHA, so a static export is genuinely viable and would have cost nothing in content. It
+loses `next/image` optimisation, which matters for a page whose job is a first impression, and it turns the future
+release lookup into a cron.
+
+**What A costs:** a commercial account the project now depends on, and a host whose free tier's terms can change.
+The site is also the first part of Prumo tied to one vendor, where the CLI and the Desktop are tied to none.
+
+**Affects:** `stjosephworks/prumo-site`
+
+---
+
+## 2026-09-17: One markdown pipeline at build, and the site's own pages are TSX
+
+**Decision:** the fetched markdown is converted to HTML at build by a `unified` pipeline: `remark-parse`,
+`remark-gfm`, `remark-rehype`, heading slugs and anchor links, and Shiki for code. The pages the site writes are
+ordinary TSX components reading a translation dictionary, not MDX, and no MDX is installed.
+
+**Options considered:**
+- A) A `unified` pipeline for the fetched files, TSX for the site's own pages.
+- B) Fumadocs.
+- C) The same pipeline, with `@next/mdx` for the site's own pages.
+
+**Reasoning:** A. The site's own pages are layout rather than prose, a hero, an install block with npm and pnpm
+side by side, cards: that is component work, and MDX's advantage only appears where long prose occasionally needs a
+component. In two languages, C also turns every page into two files that drift apart with nothing comparing them,
+where a dictionary keeps the structure in one place and only the strings in two.
+
+**B was the strongest alternative and lost on a structural mismatch:** Fumadocs would arrive with the sidebar,
+table of contents, search and i18n already solved, which is real work it would save. Its content layer expects MDX
+files in the repository, and ours is markdown fetched from two other repositories and pinned by commit, so the part
+that saves the most work is the part that does not fit. It would also own `app/` and bring its own dependency
+versions into a template whose versions are pinned exactly.
+
+**What A costs:** the sidebar, the table of contents and the navigation between documents are written by hand, and
+they are precisely what Fumadocs would have given. Search is not solved by this choice either and is decided
+separately. Every rendering detail markdown can contain, tables, nested lists, footnotes, is ours to style, and
+the source documents use them heavily.
+
+**Affects:** `stjosephworks/prumo-site`
+
+---
+
+## 2026-09-17: Search is a JSON index emitted by the build, searched in the browser
+
+**Decision:** the same pipeline that renders the markdown emits a search index: one record per heading, holding the
+document, the heading text, its anchor and the paragraph under it. The browser loads that JSON and filters it. No
+search service, and no second pass over the build output.
+
+**Options considered:**
+- A) A JSON index emitted by the existing pipeline, filtered client-side.
+- B) Pagefind, run over the build output.
+- C) No search in version 1.
+
+**Reasoning:** A. `DECISIONS.md` is 476 KB and is the most persuasive thing Prumo has to show, every choice with
+its reasoning and its price, and without search it is a wall nobody scrolls. The corpus is about ten documents, so
+an index built from a parse that already happens is enough, and it costs one more output from a step the build
+already runs. C leaves the project's best material unreachable. B is the better search and needs a post-build pass
+over rendered HTML, which outside `output: 'export'` is a step that exists only to serve the index and breaks on a
+Next upgrade.
+
+**What A costs:** substring matching, with no ranking, no stemming and no tolerance for a typo, so a reader who
+searches `authentication` does not find `auth`. The index grows with the documents, and `DECISIONS.md` alone is
+hundreds of headings, so it is only small while the corpus is; the day it is not, B becomes right and this is
+rewritten.
+
+**Affects:** `stjosephworks/prumo-site`
+
+---
+
+## 2026-09-17: The website documents one Prumo, the one it is pinned to
+
+**Decision:** the documentation is not versioned. The site describes the commits its manifest pins, and shows the
+CLI version it is describing in the footer. There is no version selector and no archive.
+
+**Options considered:**
+- A) The current version only.
+- B) Versioned routes and a selector from the start.
+
+**Reasoning:** A. `0.0.1` is the only version ever published and Prumo is in beta, so B would build the whole
+mechanism, a set of pins per version and a selector over it, to serve an archive containing one entry. The
+manifest's pins already state which Prumo the site describes, which is the honest part of versioning, and it costs
+a line in the footer.
+
+**What A costs:** when 1.0 changes what a generated project looks like, and the README already says it can, anyone
+still on a 0.0.x project finds a site describing something else, with no older copy to read. Recovering it then
+means building the selector anyway, against a site whose routes assumed a single version.
+
+**Affects:** `stjosephworks/prumo-site`
+
+---

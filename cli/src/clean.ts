@@ -45,7 +45,7 @@ export const README_ROW =
   '| `pnpm db:setup` | Creates a development database in Docker, writes its URL into `.env`, and migrates |\n'
 
 export const WORKSPACE_SENTENCE =
-  'If the workspace holds `api` and its database is not set up yet, it offers to create one first. '
+  'If the workspace holds `api` and its database is not set up yet, `pnpm dev` offers to create the database first.\n\n'
 
 function textRule(
   id: string,
@@ -142,7 +142,7 @@ function rulesFor(root: string, api: string, templates: string): { rules: Rule[]
         'Remove the database offer from the README',
         WORKSPACE_SENTENCE,
         '',
-        'offers to create one',
+        'offers to create the database',
       ),
     )
   }

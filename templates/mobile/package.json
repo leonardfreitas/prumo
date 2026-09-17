@@ -5,7 +5,7 @@
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
-    "dev": "pnpm start",
+    "dev": "node scripts/ports.mjs -- expo start",
     "ios": "expo start --ios",
     "android": "expo start --android",
     "bundle": "expo export --platform ios --platform android",

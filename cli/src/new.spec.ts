@@ -216,6 +216,21 @@ describe('generate', () => {
     expect(JSON.parse(await readFile(join(target, 'package.json'), 'utf8')).name).toBe('acme')
   })
 
+  it('gives a site the .env it needs to pick its port', async () => {
+    root = await mkdtemp(join(tmpdir(), 'prumo-new-'))
+    const target = join(root, 'acme')
+
+    await generate({
+      templates,
+      knowledge,
+      target,
+      install: false,
+      answers: { name: 'acme', types: ['site'], architecture: 'alone', multiTenant: false },
+    })
+
+    expect(await readFile(join(target, '.env'), 'utf8')).toMatch(/^SITE_PORT=3200$/m)
+  })
+
   it('refuses to write into a directory that is not empty', async () => {
     root = await mkdtemp(join(tmpdir(), 'prumo-new-'))
 

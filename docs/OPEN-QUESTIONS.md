@@ -107,3 +107,17 @@ chose, and nothing points back at the name. Any name that matches a package in t
 known after installing, or keeping a short list of names the templates are known to pull in.
 
 ---
+
+---
+
+## The ports check on Windows
+
+`scripts/ports.mjs` finds and stops what holds a port with `lsof` and `ps` on macOS and Linux, and with `netstat`,
+`tasklist` and `taskkill` on Windows. Only the first path has been run; the Windows one is written from the
+documented behaviour of those commands and has never been executed here.
+
+**Question:** does it list the holder and free the port on Windows, and does `expo start --port` behave there as it
+does on macOS?
+
+**Blocks:** nothing today. A generated project on Windows falls back to the same error as before, `EADDRINUSE`.
+
