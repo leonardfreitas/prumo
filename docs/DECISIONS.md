@@ -8708,3 +8708,43 @@ page and passed with the defect in place. The document says to start from a prot
 produces.
 
 **Affects:** `web/routing.md`
+
+---
+
+## 2026-09-17: Both clients ship sign-out, and signing out clears everything the user left
+
+**Decision:** `web` and `mobile` each carry a **Sign out** button on the profile screen. On web it clears the whole
+query cache and navigates to sign in. On mobile it clears the query cache and every user-scoped storage key, as
+`mobile/storage.md` already required; the Expo plugin deletes the stored cookie itself. Both clear even when the
+sign-out request fails.
+
+**Closes** the open question *Do the client templates ship sign-out?*
+
+**What web clears, options considered:** A) refetch the session only. B) clear the whole cache. C) remove the user's
+queries one by one. **B**, because `['profile', 'me']` holds whoever was signed in: under A the next person on the tab
+signs in and reads the previous profile, which a test proved by showing Bruno the display name *Ana*. C fails the day
+somebody adds a query and forgets the list.
+
+**Where the button lives, options considered:** A) on the profile screen. B) in the authenticated layout. **A**,
+because a day-zero project has one protected screen, and a header built to hold one button is interface to delete;
+moving it when a second screen arrives is a small change that belongs to the project.
+
+**Found on the way, each proved by a failing test before it was fixed:**
+- **Mobile's authenticated layout redirected on a pending session.** Invisible at a cold start, because the root
+  layout holds rendering until the session arrives. But signing out empties the cache, and the next sign-in would
+  have mounted the layout with the session still on its way and sent the person straight back to sign in. The
+  layout now waits while pending. A missing session and an unreadable one still redirect, each with its own test.
+- **Better Auth throws when the sign-out request never arrives**, so clearing after the call would never run on a
+  network failure. Both clients catch it on purpose: the Expo plugin has already deleted the stored cookie before
+  sending, and the server's session expires on its own.
+
+**Verified:** in headless Chrome against a generated workspace, Ana signs up and sees *Ana*, signs out to the sign-in
+page, and Bruno signs up on the same tab and sees *Bruno*. In a composed `api`, `web` and `mobile` workspace, lint,
+typecheck and both clients' seven tests pass with the imports rewritten to the shared contract.
+
+**What it costs:** a failed sign-out leaves a live session on the server until it expires, and on web the HttpOnly
+cookie with it, so reopening the app may show the person still signed in.
+
+**Affects:** `templates/web/src/features/auth/`, `templates/web/src/routes/_authenticated/index.tsx`,
+`templates/web/src/app.spec.tsx`, `templates/mobile/src/features/auth/`, `templates/mobile/src/app/(app)/`,
+`web/routing.md`, `docs/OPEN-QUESTIONS.md`

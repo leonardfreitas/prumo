@@ -73,19 +73,6 @@ The same gap hides the guard, the filter and the serializer, none of which a ser
 
 ---
 
-## Do the client templates ship sign-out?
-
-**Raised:** 2026-09-15
-**Question:** `web` and `mobile` ship sign-in, sign-up and an editable profile, and no way to sign out.
-**Why it matters:** under the day-zero test, signing out is day-one work in any app with sign-in, which is the reason sign-up
-was added. On mobile it is also where a silent rule lives: `mobile/storage.md` requires logout to clear the session,
-the persisted query cache and every user-scoped MMKV key, the template has `clearUserData` ready, and nothing calls
-it. Without an example, the first implementation likely clears the session only, and the next user on the device sees
-the previous user's cached data.
-**Blocks:** nothing today; it would add to `templates/web` and `templates/mobile`
-
----
-
 ## How does `prumo update` refresh a project's `.prumo/`?
 
 **Raised:** 2026-09-15

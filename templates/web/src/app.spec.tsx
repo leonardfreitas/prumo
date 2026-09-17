@@ -76,4 +76,67 @@ describe('App', () => {
 
     expect(await screen.findByRole('heading', { name: 'Your profile' })).toBeInTheDocument()
   })
+
+  it('shows the next person on the tab their own profile, not the previous one', async () => {
+    const visitor = userEvent.setup()
+    const people = {
+      ana: { user, profile },
+      bruno: {
+        user: { id: 'user-2', email: 'bruno@example.com', name: 'Bruno' },
+        profile: { ...profile, id: 'profile-2', userId: 'user-2', displayName: 'Bruno' },
+      },
+    }
+    let current: keyof typeof people | null = 'ana'
+
+    renderApp(
+      '/',
+      fakeTransport({
+        'GET /api/auth/get-session': () =>
+          json(
+            200,
+            current === null
+              ? null
+              : { session: { id: `session-${current}` }, user: people[current].user },
+          ),
+        'POST /api/auth/sign-out': () => {
+          current = null
+          return json(200, { success: true })
+        },
+        'POST /api/auth/sign-in/email': () => {
+          current = 'bruno'
+          return json(200, { redirect: false, token: 'token-2', user: people.bruno.user })
+        },
+        'GET /api/v1/users/me': () => json(200, current === null ? null : people[current].profile),
+      }),
+    )
+
+    expect(await screen.findByLabelText('Display name')).toHaveValue('Ana')
+
+    await visitor.click(screen.getByRole('button', { name: 'Sign out' }))
+    await visitor.type(await screen.findByLabelText('Email'), people.bruno.user.email)
+    await visitor.type(screen.getByLabelText('Password'), 'correct-horse-battery')
+    await visitor.click(screen.getByRole('button', { name: 'Sign in' }))
+
+    await screen.findByRole('heading', { name: 'Your profile' })
+    expect(screen.getByLabelText('Display name')).toHaveValue('Bruno')
+  })
+
+  it('signs a visitor out of this tab even when the sign-out request never arrives', async () => {
+    const visitor = userEvent.setup()
+
+    renderApp(
+      '/',
+      fakeTransport({
+        'GET /api/auth/get-session': () => json(200, session),
+        'GET /api/v1/users/me': () => json(200, profile),
+        'POST /api/auth/sign-out': () => {
+          throw new TypeError('Failed to fetch')
+        },
+      }),
+    )
+
+    await visitor.click(await screen.findByRole('button', { name: 'Sign out' }))
+
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
+  })
 })
