@@ -1,7 +1,4 @@
 import { spawnSync } from 'node:child_process'
-import { existsSync, readdirSync } from 'node:fs'
-import { connect } from 'node:net'
-import { join } from 'node:path'
 
 export type Status = 'ok' | 'warn' | 'fail'
 
@@ -18,9 +15,6 @@ export type Report = { ready: boolean; checks: Check[] }
 export type Probe = {
   nodeVersion: string
   run: (command: string, args: string[]) => { ok: boolean; stdout: string }
-  exists: (path: string) => boolean
-  list: (directory: string) => string[]
-  portOpen: (host: string, port: number) => Promise<boolean>
 }
 
 const NODE_FLOOR = [22, 17, 0]
@@ -32,19 +26,6 @@ export const systemProbe: Probe = {
 
     return { ok: result.error === undefined && result.status === 0, stdout: result.stdout ?? '' }
   },
-  exists: existsSync,
-  list: (directory) => (existsSync(directory) ? readdirSync(directory) : []),
-  portOpen: (host, port) =>
-    new Promise((done) => {
-      const socket = connect({ host, port, timeout: 2000 })
-      const finish = (open: boolean) => {
-        socket.destroy()
-        done(open)
-      }
-      socket.once('connect', () => finish(true))
-      socket.once('timeout', () => finish(false))
-      socket.once('error', () => finish(false))
-    }),
 }
 
 function atLeast(version: string, floor: number[]): boolean {
@@ -58,31 +39,6 @@ function atLeast(version: string, floor: number[]): boolean {
   }
 
   return true
-}
-
-function newestFirst(entries: string[]): string[] {
-  return [...entries].sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
-}
-
-// The same places the API template's scripts/database.mjs looks, since that script is what needs psql.
-function findPsql(probe: Probe): string | undefined {
-  if (probe.run('psql', ['--version']).ok) {
-    return 'psql'
-  }
-
-  const candidates = [
-    ...newestFirst(probe.list('/Library/PostgreSQL')).map((version) =>
-      join('/Library/PostgreSQL', version, 'bin/psql'),
-    ),
-    '/Applications/Postgres.app/Contents/Versions/latest/bin/psql',
-    ...['/opt/homebrew/opt', '/usr/local/opt'].flatMap((parent) =>
-      newestFirst(probe.list(parent).filter((entry) => entry.startsWith('postgresql'))).map(
-        (entry) => join(parent, entry, 'bin/psql'),
-      ),
-    ),
-  ]
-
-  return candidates.find((candidate) => probe.exists(candidate))
 }
 
 function firstLine(text: string): string {
@@ -129,51 +85,8 @@ export async function doctor(probe: Probe = systemProbe): Promise<Report> {
       : {
           status: 'warn',
           detail: docker.ok
-            ? 'installed but not running; the API tests and its Docker database need it'
-            : 'not found; the API tests and its Docker database need it',
-        }),
-  })
-
-  const psql = findPsql(probe)
-  const psqlVersion = psql === undefined ? undefined : probe.run(psql, ['--version'])
-
-  checks.push({
-    id: 'psql',
-    label: 'psql',
-    required: false,
-    ...(psql === undefined
-      ? { status: 'warn', detail: 'not found; needed to create a database on a local Postgres' }
-      : {
-          status: 'ok',
-          detail: `${firstLine(psqlVersion?.stdout ?? '')}${psql === 'psql' ? '' : ` at ${psql}`}`,
-        }),
-  })
-
-  const serverUp = await probe.portOpen('localhost', 5432)
-
-  checks.push({
-    id: 'postgres',
-    label: 'Postgres on localhost:5432',
-    required: false,
-    ...(serverUp
-      ? { status: 'ok', detail: 'answering; the API needs version 18 or later' }
-      : { status: 'warn', detail: 'nothing answers' }),
-  })
-
-  const database = (serverUp && psql !== undefined) || dockerRunning
-
-  checks.push({
-    id: 'database',
-    label: 'A database for the API',
-    required: false,
-    ...(database
-      ? {
-          status: 'ok',
-          detail: serverUp && psql !== undefined ? 'local Postgres' : 'Docker',
-        }
-      : {
-          status: 'warn',
-          detail: 'neither a local Postgres with psql nor a running Docker; `prumo db` cannot work',
+            ? 'installed but not running; open Docker Desktop. The API runs its database and tests in it'
+            : 'not found; install Docker Desktop. The API runs its database and tests in it',
         }),
   })
 

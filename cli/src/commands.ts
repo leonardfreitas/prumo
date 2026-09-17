@@ -28,15 +28,13 @@ export const COMMANDS: CommandHelp[] = [
   {
     name: 'db',
     usage: 'prumo db [options]',
-    summary: "Create the development database and write its URL into the API's .env",
+    summary: "Create the development database in Docker and write its URL into the API's .env",
     options: [
       { flag: '--name <name>', description: 'Database name; asked when omitted' },
-      { flag: '--local', description: 'Use the Postgres on this machine only' },
-      { flag: '--docker', description: "Use the project's docker-compose.yml only" },
-      { flag: '--host <host>', description: 'Postgres host, localhost by default' },
-      { flag: '--port <port>', description: 'Postgres port, 5432 by default' },
-      { flag: '--user <user>', description: 'Postgres user for a local server' },
-      { flag: '--password <password>', description: 'Its password; PGPASSWORD also works' },
+      {
+        flag: '--port <port>',
+        description: 'Host port for Postgres; the first free from 5432 by default',
+      },
       { flag: '--skip-migrate', description: 'Do not run pnpm db:migrate afterwards' },
       JSON_OPTION,
     ],

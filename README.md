@@ -31,8 +31,7 @@ workspace holding four applications, without either one carrying rules it has no
 
 ## Requirements
 
-Node 22.17 or later, pnpm, and for anything with an API, PostgreSQL 18 on the machine or Docker.
-`prumo doctor` checks all of it.
+Node 22.17 or later, pnpm, and Docker for anything with an API. `prumo doctor` checks all of it.
 
 ## Running it
 
@@ -68,9 +67,9 @@ npx @stjoseph/prumo new my-app --types api,web --single-tenant
 | Command | What it does |
 |---|---|
 | `prumo new [name]` | Generates a project |
-| `prumo db` | Inside a project with an API: creates the development database and writes its URL into `.env` |
+| `prumo db` | Inside a project with an API: creates the development database in Docker and writes its URL into `.env` |
 | `prumo clean` | Removes what the project needed only once, today the database setup, once the database exists |
-| `prumo doctor` | Checks Node, pnpm, git, Docker and Postgres on this machine |
+| `prumo doctor` | Checks Node, pnpm, git and Docker on this machine |
 | `prumo version` · `--version` · `-v` | Prints the CLI version |
 | `prumo help [command]` · `--help` | Lists the commands, or describes one |
 

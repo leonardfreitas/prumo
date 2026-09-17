@@ -1,25 +1,23 @@
-// Creates the development database and writes its URL into .env.
+// Creates the development database in Docker and writes its URL into .env.
 //
 //   node scripts/database.mjs            creates a database, whatever .env holds
 //   node scripts/database.mjs --check    does nothing unless DATABASE_URL is still MISSING; `pnpm dev` runs this
 //
-// A Postgres already listening on localhost is used first; without one, the Docker service in docker-compose.yml.
-// It needs no dependency, so it runs before `pnpm install` has finished anything but Node itself.
+// The server is always the one in docker-compose.yml, published on 5432 or, when that port is taken, the next free
+// one, kept in POSTGRES_PORT. It needs no dependency, so it runs before `pnpm install` has installed anything.
 import { spawnSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { connect } from 'node:net'
-import { userInfo } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { createInterface } from 'node:readline/promises'
 import { parseArgs } from 'node:util'
 
 const MISSING = 'MISSING'
-const MINIMUM_SERVER_VERSION = 180000
-const DOCKER_USER = 'app'
-const DOCKER_PASSWORD = 'app'
+const USER = 'app'
+const PASSWORD = 'app'
+const DEFAULT_PORT = 5432
+const PORTS_TRIED = 20
 const NAME = /^[a-z_][a-z0-9_]{0,62}$/
-// Never prompt for a password, stop at the first error, print bare values, and read the SQL from stdin.
-const PSQL_SCRIPT = ['-w', '-v', 'ON_ERROR_STOP=1', '-tAq', '-f', '-']
 
 const api = resolve(import.meta.dirname, '..')
 const envPath = join(api, '.env')
@@ -28,12 +26,7 @@ const { values } = parseArgs({
   options: {
     check: { type: 'boolean', default: false },
     name: { type: 'string' },
-    local: { type: 'boolean', default: false },
-    docker: { type: 'boolean', default: false },
-    host: { type: 'string', default: 'localhost' },
-    port: { type: 'string', default: '5432' },
-    user: { type: 'string' },
-    password: { type: 'string' },
+    port: { type: 'string' },
     'skip-migrate': { type: 'boolean', default: false },
     json: { type: 'boolean', default: false },
   },
@@ -41,6 +34,8 @@ const { values } = parseArgs({
 
 const json = values.json
 const interactive = !json && process.stdin.isTTY === true && process.stdout.isTTY === true
+// Under --json, stdout belongs to the result document.
+const childStdio = ['ignore', json ? 2 : 'inherit', 'inherit']
 
 class Failure extends Error {
   constructor(code, message) {
@@ -51,13 +46,6 @@ class Failure extends Error {
 
 function say(message) {
   ;(json ? process.stderr : process.stdout).write(`${message}\n`)
-}
-
-function needsInput(what, flag) {
-  return new Failure(
-    'needs_input',
-    `${what} is required. Outside an interactive terminal, pass ${flag}.`,
-  )
 }
 
 async function ask(question, fallback) {
@@ -73,17 +61,6 @@ async function confirm(question) {
   return answer === undefined || /^y(es)?$/i.test(answer)
 }
 
-async function askSecret(question) {
-  const readline = createInterface({ input: process.stdin, output: process.stdout, terminal: true })
-  process.stdout.write(`${question}: `)
-  // Echo nothing while the password is typed.
-  readline._writeToOutput = () => {}
-  const answer = await readline.question('')
-  readline.close()
-  process.stdout.write('\n')
-  return answer
-}
-
 function readEnv() {
   return existsSync(envPath) ? readFileSync(envPath, 'utf8') : undefined
 }
@@ -97,6 +74,14 @@ function withEnvValue(env, key, value) {
   return line.test(env)
     ? env.replace(line, `${key}=${value}`)
     : `${env.replace(/\n?$/, '\n')}${key}=${value}\n`
+}
+
+function writeEnv(entries) {
+  let env = readEnv() ?? ''
+  for (const [key, value] of Object.entries(entries)) {
+    env = withEnvValue(env, key, value)
+  }
+  writeFileSync(envPath, env)
 }
 
 function defaultName() {
@@ -115,44 +100,13 @@ function defaultName() {
   return NAME.test(name) ? name : `app_${name}`.slice(0, 63)
 }
 
-function commandExists(command) {
-  return spawnSync(command, ['--version'], { stdio: 'ignore' }).error === undefined
+function docker(args, options = {}) {
+  return spawnSync('docker', args, { cwd: api, encoding: 'utf8', ...options })
 }
 
-function versionedDirectories(parent, suffix) {
-  if (!existsSync(parent)) {
-    return []
-  }
-
-  return readdirSync(parent)
-    .map((entry) => join(parent, entry, suffix))
-    .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
-}
-
-// macOS installers leave psql off PATH: the EDB installer, Postgres.app and a keg-only Homebrew formula all do.
-function findPsql() {
-  const candidates = [
-    'psql',
-    ...versionedDirectories('/Library/PostgreSQL', 'bin/psql'),
-    '/Applications/Postgres.app/Contents/Versions/latest/bin/psql',
-    ...['/opt/homebrew/opt', '/usr/local/opt'].flatMap((parent) =>
-      existsSync(parent)
-        ? readdirSync(parent)
-            .filter((entry) => entry.startsWith('postgresql'))
-            .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
-            .map((entry) => join(parent, entry, 'bin/psql'))
-        : [],
-    ),
-  ]
-
-  return candidates.find((candidate) =>
-    candidate === 'psql' ? commandExists('psql') : existsSync(candidate),
-  )
-}
-
-function portOpen(host, port) {
+function listening(host, port) {
   return new Promise((done) => {
-    const socket = connect({ host, port: Number(port), timeout: 2000 })
+    const socket = connect({ host, port, timeout: 1000 })
     const finish = (open) => {
       socket.destroy()
       done(open)
@@ -163,182 +117,93 @@ function portOpen(host, port) {
   })
 }
 
-function classify(stderr) {
-  if (
-    /password authentication failed|no password supplied|role ".*" does not exist|authentication failed/i.test(
-      stderr,
+async function portTaken(port) {
+  // A server on this machine may listen on only one of the two loopback addresses.
+  return (await listening('127.0.0.1', port)) || (await listening('::1', port))
+}
+
+function requireDocker() {
+  if (docker(['--version']).error !== undefined) {
+    throw new Failure(
+      'docker_missing',
+      'Docker is not installed. Install Docker Desktop from https://www.docker.com/products/docker-desktop/ and run this again.',
     )
-  ) {
-    return 'auth'
   }
-  if (/connection refused|could not connect|timeout expired|is the server running/i.test(stderr)) {
-    return 'unreachable'
-  }
-  return 'error'
-}
-
-// One way to run SQL, whichever server answers: the local psql, or psql inside the Docker service.
-function localServer({ psql, host, port, user, password }) {
-  return {
-    source: 'local',
-    host,
-    port,
-    user,
-    password,
-    sql(database, text) {
-      return spawnSync(psql, ['-h', host, '-p', port, '-U', user, '-d', database, ...PSQL_SCRIPT], {
-        input: text,
-        encoding: 'utf8',
-        env: { ...process.env, PGPASSWORD: password ?? '', PGCONNECT_TIMEOUT: '5' },
-      })
-    },
+  if (docker(['info']).status !== 0) {
+    throw new Failure(
+      'docker_not_running',
+      'Docker is installed but not running. Open Docker Desktop, wait until it says it is running, and run this again.',
+    )
   }
 }
 
-function dockerServer(port) {
-  return {
-    source: 'docker',
-    host: 'localhost',
-    port,
-    user: DOCKER_USER,
-    password: DOCKER_PASSWORD,
-    sql(database, text) {
-      return spawnSync(
-        'docker',
-        [
-          'compose',
-          'exec',
-          '-T',
-          'postgres',
-          'psql',
-          '-U',
-          DOCKER_USER,
-          '-d',
-          database,
-          ...PSQL_SCRIPT,
-        ],
-        { cwd: api, input: text, encoding: 'utf8' },
-      )
-    },
+// The port the service already publishes, when it is up: moving it would only restart it for nothing.
+function publishedPort() {
+  const result = docker(['compose', 'port', 'postgres', '5432'])
+  const port = /:(\d+)\s*$/.exec(result.stdout ?? '')?.[1]
+
+  return result.status === 0 && port !== undefined ? Number(port) : undefined
+}
+
+async function choosePort(env) {
+  const running = publishedPort()
+
+  if (running !== undefined) {
+    return running
+  }
+
+  if (values.port !== undefined) {
+    const port = Number(values.port)
+    if (await portTaken(port)) {
+      throw new Failure('port_busy', `Port ${port} is already in use.`)
+    }
+    return port
+  }
+
+  const start = Number(envValue(env, 'POSTGRES_PORT') ?? DEFAULT_PORT)
+
+  for (let port = start; port < start + PORTS_TRIED; port += 1) {
+    if (!(await portTaken(port))) {
+      if (port !== start) {
+        say(`Port ${start} is in use; Postgres will listen on ${port}.`)
+      }
+      return port
+    }
+  }
+
+  throw new Failure(
+    'port_busy',
+    `Ports ${start} to ${start + PORTS_TRIED - 1} are all in use. Pass --port with a free one.`,
+  )
+}
+
+function startPostgres(port) {
+  // docker-compose.yml reads POSTGRES_PORT from this .env, so the file is written before the service starts.
+  writeEnv({ POSTGRES_PORT: port })
+  say('Starting Postgres in Docker…')
+
+  if (docker(['compose', 'up', '-d', '--wait'], { stdio: childStdio }).status !== 0) {
+    throw new Failure('docker_failed', '`docker compose up -d --wait` failed; its output is above.')
   }
 }
 
-function query(server, database, text) {
-  const result = server.sql(database, text)
+// Stop at the first error, print bare values, and read the SQL from stdin.
+const PSQL_SCRIPT = ['-v', 'ON_ERROR_STOP=1', '-tAq', '-f', '-']
+
+function sql(database, text) {
+  const result = docker(
+    ['compose', 'exec', '-T', 'postgres', 'psql', '-U', USER, '-d', database, ...PSQL_SCRIPT],
+    { input: text },
+  )
 
   if (result.error !== undefined || result.status !== 0) {
-    const stderr = result.stderr?.trim() || result.error?.message || 'psql failed'
-    throw new Failure(classify(stderr) === 'auth' ? 'postgres_auth' : 'postgres_error', stderr)
+    throw new Failure(
+      'postgres_error',
+      result.stderr?.trim() || result.error?.message || 'psql failed',
+    )
   }
 
   return result.stdout.trim()
-}
-
-async function connectLocal(psql) {
-  let user = values.user ?? process.env.PGUSER ?? userInfo().username
-  let password = values.password ?? process.env.PGPASSWORD
-
-  for (let attempt = 0; ; attempt += 1) {
-    const server = localServer({ psql, host: values.host, port: values.port, user, password })
-    const result = server.sql('postgres', 'SHOW server_version_num')
-
-    if (result.error === undefined && result.status === 0) {
-      return { server, version: Number(result.stdout.trim()) }
-    }
-
-    const stderr = result.stderr?.trim() ?? ''
-    const kind = classify(stderr)
-
-    if (kind === 'unreachable') {
-      return undefined
-    }
-    if (kind !== 'auth') {
-      throw new Failure('postgres_error', stderr)
-    }
-    if (!interactive || attempt === 2) {
-      throw new Failure(
-        'postgres_auth',
-        `Postgres on ${values.host}:${values.port} refused ${user}. ${stderr}`,
-      )
-    }
-
-    say(`Postgres on ${values.host}:${values.port} refused ${user}.`)
-    user = await ask('Postgres user', user)
-    password = await askSecret('Password')
-  }
-}
-
-function startDocker() {
-  if (spawnSync('docker', ['info'], { stdio: 'ignore' }).status !== 0) {
-    throw new Failure(
-      'postgres_unavailable',
-      'No Postgres answers on localhost, and Docker is not running.',
-    )
-  }
-
-  say('Starting Postgres with docker compose…')
-  const result = spawnSync('docker', ['compose', 'up', '-d', '--wait'], {
-    cwd: api,
-    stdio: ['ignore', json ? 2 : 'inherit', 'inherit'],
-  })
-
-  if (result.status !== 0) {
-    throw new Failure('docker_failed', '`docker compose up -d --wait` failed.')
-  }
-
-  const server = dockerServer(values.port)
-  return { server, version: Number(query(server, 'postgres', 'SHOW server_version_num')) }
-}
-
-async function pickServer() {
-  if (values.local && values.docker) {
-    throw new Failure('usage', 'Choose --local or --docker, not both.')
-  }
-
-  if (!values.docker) {
-    const psql = findPsql()
-
-    if (psql !== undefined) {
-      const local = await connectLocal(psql)
-      if (local !== undefined) {
-        return local
-      }
-    } else if (await portOpen(values.host, values.port)) {
-      throw new Failure(
-        'postgres_unavailable',
-        `Something listens on ${values.host}:${values.port}, but psql is not on PATH to create the database.`,
-      )
-    }
-
-    if (values.local) {
-      throw new Failure(
-        'postgres_unavailable',
-        `No Postgres answers on ${values.host}:${values.port}.`,
-      )
-    }
-  }
-
-  if (!commandExists('docker')) {
-    throw new Failure(
-      'postgres_unavailable',
-      'No Postgres answers on localhost, and Docker is not installed.',
-    )
-  }
-
-  if (
-    interactive &&
-    !values.docker &&
-    !(await confirm('No local Postgres answers. Start the one in docker-compose.yml?'))
-  ) {
-    throw new Failure('declined', 'Nothing was created.')
-  }
-
-  return startDocker()
-}
-
-function urlFor(server, database) {
-  const password = server.password ? `:${encodeURIComponent(server.password)}` : ''
-  return `postgresql://${encodeURIComponent(server.user)}${password}@${server.host}:${server.port}/${database}`
 }
 
 async function main() {
@@ -356,7 +221,7 @@ async function main() {
       )
     }
     say('DATABASE_URL in .env is still MISSING.')
-    if (!(await confirm('Create a development database now?'))) {
+    if (!(await confirm('Create a development database in Docker now?'))) {
       throw new Failure('declined', 'DATABASE_URL is MISSING. Run `pnpm db:setup` when ready.')
     }
   }
@@ -368,7 +233,10 @@ async function main() {
   const name = values.name ?? (interactive ? await ask('Database name', defaultName()) : undefined)
 
   if (name === undefined) {
-    throw needsInput('The database name', '--name')
+    throw new Failure(
+      'needs_input',
+      'The database name is required. Outside an interactive terminal, pass --name.',
+    )
   }
   if (!NAME.test(name)) {
     throw new Failure(
@@ -377,49 +245,37 @@ async function main() {
     )
   }
 
-  const { server, version } = await pickServer()
+  requireDocker()
 
-  if (version < MINIMUM_SERVER_VERSION) {
-    throw new Failure(
-      'postgres_version',
-      `Postgres 18 or later is required; the server reports ${version}.`,
-    )
-  }
+  const port = await choosePort(env)
+  startPostgres(port)
 
-  const exists =
-    query(server, 'postgres', `SELECT 1 FROM pg_database WHERE datname = '${name}'`) === '1'
+  const exists = sql('postgres', `SELECT 1 FROM pg_database WHERE datname = '${name}'`) === '1'
 
   if (exists) {
     say(`Database ${name} already exists; using it.`)
   } else {
-    query(server, 'postgres', `CREATE DATABASE "${name}"`)
-    say(`Created database ${name} (${server.source}).`)
+    sql('postgres', `CREATE DATABASE "${name}"`)
+    say(`Created database ${name}.`)
   }
 
-  // The same scripts the Docker image runs on first start, so both servers end up with the same schemas.
+  // The image runs docker/init only for the database it creates on first start; every other one needs them too.
   const init = join(api, 'docker', 'init')
   for (const file of readdirSync(init)
     .filter((entry) => entry.endsWith('.sql'))
     .sort()) {
-    query(server, name, readFileSync(join(init, file), 'utf8'))
+    sql(name, readFileSync(join(init, file), 'utf8'))
   }
 
-  const url = urlFor(server, name)
-  writeFileSync(
-    envPath,
-    withEnvValue(withEnvValue(readEnv() ?? env, 'DATABASE_URL', url), 'AUTH_DATABASE_URL', url),
-  )
+  const url = `postgresql://${USER}:${PASSWORD}@localhost:${port}/${name}`
+  writeEnv({ DATABASE_URL: url, AUTH_DATABASE_URL: url })
   say('Wrote DATABASE_URL and AUTH_DATABASE_URL to .env.')
 
   let migrated = false
 
   if (!values['skip-migrate']) {
     say('Migrating…')
-    const result = spawnSync('pnpm', ['db:migrate'], {
-      cwd: api,
-      stdio: ['ignore', json ? 2 : 'inherit', 'inherit'],
-    })
-    if (result.status !== 0) {
+    if (spawnSync('pnpm', ['db:migrate'], { cwd: api, stdio: childStdio }).status !== 0) {
       throw new Failure(
         'migrate_failed',
         '`pnpm db:migrate` failed. The database exists and .env points at it.',
@@ -428,15 +284,7 @@ async function main() {
     migrated = true
   }
 
-  return {
-    database: name,
-    source: server.source,
-    host: server.host,
-    port: server.port,
-    user: server.user,
-    created: !exists,
-    migrated,
-  }
+  return { database: name, port, created: !exists, migrated }
 }
 
 try {

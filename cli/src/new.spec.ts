@@ -202,6 +202,9 @@ describe('generate', () => {
     expect(existsSync(join(target, '.githooks/install.mjs'))).toBe(true)
     expect(existsSync(join(target, 'apps/api/.githooks'))).toBe(false)
     expect(env).toMatch(/^MOBILE_APP_SCHEME=acme$/m)
+    expect(await readFile(join(target, 'apps/api/docker-compose.yml'), 'utf8')).toMatch(
+      /^name: acme$/m,
+    )
     expect(await readFile(join(target, 'apps/api/.env'), 'utf8')).toMatch(
       /^MOBILE_APP_SCHEME=acme$/m,
     )

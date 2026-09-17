@@ -2,7 +2,7 @@
 
 ## Requirements
 
-Node 22.17 or later and pnpm. For the API, PostgreSQL 18 on this machine or Docker; its tests need Docker.
+Node 22.17 or later and pnpm. For the API, Docker Desktop running: its database and tests run in it.
 
 ## Layout
 

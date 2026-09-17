@@ -33,17 +33,16 @@ export const EXAMPLE_BLOCK =
 
 export const README_PARAGRAPH =
   '`DATABASE_URL` starts as `MISSING`. While it is, `pnpm dev` offers to create the database first: it asks for a name,\n' +
-  'uses a Postgres answering on `localhost:5432` (asking for a user and password if the current one is refused), and\n' +
-  'otherwise starts the Docker one. It then writes the URL into `.env` and migrates. `pnpm db:setup` does the same at any\n' +
-  'time. Without a terminal every answer comes from a flag: `--name`, `--local` or `--docker`, `--user`, `--password`,\n' +
-  '`--skip-migrate`, and `--json` for one JSON result on stdout.\n'
+  'starts Postgres from `docker-compose.yml` on port 5432 or the next free one (kept in `POSTGRES_PORT`), writes the URL\n' +
+  'into `.env`, and migrates. `pnpm db:setup` does the same at any time. Without a terminal every answer comes from a\n' +
+  'flag: `--name`, `--port`, `--skip-migrate`, and `--json` for one JSON result on stdout.\n'
 
 const README_REPLACEMENT =
-  'Before the first `pnpm dev`, point `DATABASE_URL` and `AUTH_DATABASE_URL` at a Postgres 18 database: the one in\n' +
-  '`docker-compose.yml` matches `.env.example` once `docker compose up -d --wait` is running. Then run `pnpm db:migrate`.\n'
+  'Before the first `pnpm dev`, start Postgres with `docker compose up -d --wait` and run `pnpm db:migrate`.\n' +
+  '`.env.example` points at that service on port 5432; when `POSTGRES_PORT` changes, change both URLs with it.\n'
 
 export const README_ROW =
-  '| `pnpm db:setup` | Creates a development database, writes its URL into `.env`, and migrates |\n'
+  '| `pnpm db:setup` | Creates a development database in Docker, writes its URL into `.env`, and migrates |\n'
 
 export const WORKSPACE_SENTENCE =
   'If the workspace holds `api` and its database is not set up yet, it offers to create one first. '

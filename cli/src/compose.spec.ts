@@ -186,4 +186,14 @@ describe('every template', () => {
     expect(scripts.dev).toMatch(/^node scripts\/database\.mjs --check && /)
     expect(scripts['db:setup']).toBe('node scripts/database.mjs')
   })
+
+  it('publishes Postgres on the port .env chooses, under a name generation replaces', async () => {
+    const compose = await readFile(join(templates, 'api', 'docker-compose.yml'), 'utf8')
+
+    expect(compose).toMatch(/^name: api$/m)
+    expect(compose).toMatch(/- '\$\{POSTGRES_PORT:-5432\}:5432'/)
+    expect(await readFile(join(templates, 'api', '.env.example'), 'utf8')).toMatch(
+      /^POSTGRES_PORT=5432$/m,
+    )
+  })
 })

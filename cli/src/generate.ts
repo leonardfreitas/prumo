@@ -51,6 +51,17 @@ async function writeLocalEnv(app: string, type: AppType): Promise<void> {
 
 export type ChildOutput = 'inherit' | 'stderr'
 
+// Compose names the container and volume after the project; without this, every workspace's apps/api is `api`
+// and a second project's database replaces the first's.
+async function nameCompose(api: string, name: string): Promise<void> {
+  await rewrite(join(api, 'docker-compose.yml'), (text) => {
+    if (!/^name: .*$/m.test(text)) {
+      throw new Error(`${join(api, 'docker-compose.yml')} no longer carries a top-level name`)
+    }
+    return text.replace(/^name: .*$/m, `name: ${name}`)
+  })
+}
+
 function run(command: string, args: string[], cwd: string, output: ChildOutput): void {
   // Under --json stdout belongs to the result document, so a child's output goes to stderr instead.
   const result = spawnSync(command, args, {
@@ -89,6 +100,10 @@ export async function generate({
     await nameProject(target, answers.name)
     await writeLocalEnv(target, only)
 
+    if (only === 'api') {
+      await nameCompose(target, answers.name)
+    }
+
     if (only === 'mobile') {
       await nameMobileApp(target, answers.name)
     }
@@ -103,6 +118,10 @@ export async function generate({
 
     for (const type of answers.types) {
       await writeLocalEnv(join(target, 'apps', type), type)
+    }
+
+    if (answers.types.includes('api')) {
+      await nameCompose(join(target, 'apps', 'api'), answers.name)
     }
 
     if (answers.types.includes('mobile')) {

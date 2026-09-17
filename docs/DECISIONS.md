@@ -8902,3 +8902,40 @@ an older CLI whose script differs from the current template keeps its script, re
 `prumo db` no longer works in that project.
 
 **Affects:** `cli/src/clean.ts`, `cli/src/cli.ts`, `cli/src/commands.ts`, `cli/src/database.ts`, `README.md`
+
+---
+
+## 2026-09-17: The development database is always the Docker one
+
+**Decision:** `scripts/database.mjs` no longer looks for a local Postgres. It requires Docker, telling a missing
+installation from a stopped one, starts the service in `docker-compose.yml`, and creates the database inside it
+with the container's own `psql`. The service publishes `${POSTGRES_PORT:-5432}`, and Compose reads `POSTGRES_PORT`
+from the API's `.env`. The script keeps the port the service already publishes; otherwise it takes `POSTGRES_PORT`,
+or the next free port up to twenty above it, and writes it before starting the service. `--port` asks for one port
+and fails if it is taken. The flags `--local`, `--docker`, `--host`, `--user` and `--password` are gone, and
+`prumo doctor` no longer checks `psql` or a local server.
+
+`docker-compose.yml` carries a top-level `name`, which `prumo new` sets to the project's name.
+
+**Options considered:**
+- Server: A) Docker only; B) the local server first, as decided earlier today.
+- A taken port: A) the next free one, kept in `POSTGRES_PORT`; B) fail and explain.
+- Compose project: A) `name:` set at generation; B) named after the folder.
+
+**Reasoning:** A, A and A. Trying the local server first stalled on the first real machine it met: an EDB
+installation refused the OS user, and a password prompt is exactly where someone new to Postgres stops. Docker is
+already required for the API's tests, and its credentials are known, so nothing needs asking but the name. That
+same machine had its own Postgres on 5432, so failing on a taken port would have stalled it again. Named after the
+folder, every workspace's Compose project is `api`, and a second project's `up` replaces the first one's container.
+
+**What it costs:** anyone who prefers their own Postgres edits `.env` by hand. A port chosen for one project can be
+taken by another later, and the script then moves it only when the service is not running. `POSTGRES_PORT` is read
+by Compose and not by the API, so `.env.example` lists a variable the config class does not. A project renamed after
+generation keeps its old Compose name.
+
+**Amends:** "The API template creates its own development database, and `pnpm dev` offers to", whose local-first
+search, `psql` discovery and credential prompts are removed.
+
+**Affects:** `templates/api/scripts/database.mjs`, `templates/api/docker-compose.yml`, `templates/api/.env.example`,
+`templates/api/README.md`, `templates/workspace/README.md`, `cli/src/generate.ts`, `cli/src/doctor.ts`,
+`cli/src/commands.ts`, `cli/src/clean.ts`, `README.md`
