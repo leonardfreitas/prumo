@@ -8748,3 +8748,22 @@ cookie with it, so reopening the app may show the person still signed in.
 **Affects:** `templates/web/src/features/auth/`, `templates/web/src/routes/_authenticated/index.tsx`,
 `templates/web/src/app.spec.tsx`, `templates/mobile/src/features/auth/`, `templates/mobile/src/app/(app)/`,
 `web/routing.md`, `docs/OPEN-QUESTIONS.md`
+
+---
+
+## 2026-09-17: `mobile/routing.md` states that a pending session is not a missing one
+
+**Decision:** the authenticated layout renders nothing while the session is pending, and redirects only once it
+arrives empty or fails to load. The rule, its reason, an example pair and the three test cases are in
+`mobile/routing.md`.
+
+**Options considered:** A) state the rule in the knowledge base. B) leave it as the comment in the template layout.
+
+**Reasoning:** A. The defective check is the obvious one to write, and it is invisible in normal use: the splash
+hides it at every cold start, and only signing out, which empties the cache, exposes it on the next sign-in. A
+comment protects the one layout that carries it; the rule protects the next protected layout written in a generated
+project. The failing-to-load half is stated with it, so that waiting never becomes a way in.
+
+**What A costs:** one more rule in a document every mobile project loads.
+
+**Affects:** `mobile/routing.md`
