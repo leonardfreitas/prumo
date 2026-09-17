@@ -2,9 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, alpha, dev]
   pull_request:
-    branches: [main]
+    # Every branch the flow protects, so that a required check is never one that had no reason to run.
+    branches: [main, alpha, dev]
   schedule:
     # Versions are pinned exactly with no lockfile, so a rotted transitive turns this red on its own.
     - cron: '0 6 * * 1'

@@ -222,6 +222,8 @@ that way.
   only why it won.
 - **`docs/OPEN-QUESTIONS.md`** holds anything raised but not resolved. Review it at the start of each session.
 - **Commits** are English, imperative mood, one decision per commit where possible.
+- **Branches** follow one chain: a branch of your own → `dev` → `alpha` → `main`. Nobody pushes to those three,
+  and a ruleset refuses it. `.github/workflows/flow.yml` refuses a pull request that skips a step.
 
 ---
 
