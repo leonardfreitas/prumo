@@ -1,0 +1,38 @@
+name: Flow
+
+# Rulesets can require a pull request, but none of their rules can say where that pull request may come from.
+# This check is that rule: main takes alpha, alpha takes dev, and dev takes the branch the work was done on.
+on:
+  pull_request:
+    branches: [main, alpha, dev]
+
+jobs:
+  flow:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check where this pull request comes from
+        env:
+          BASE: ${{ github.base_ref }}
+          HEAD: ${{ github.head_ref }}
+        run: |
+          refuse() {
+            echo "A pull request into $BASE must come from $1, and this one comes from $HEAD."
+            echo "The chain is: a branch of your own -> dev -> alpha -> main."
+            exit 1
+          }
+
+          case "$BASE" in
+            main)
+              [ "$HEAD" = 'alpha' ] || refuse 'alpha'
+              ;;
+            alpha)
+              [ "$HEAD" = 'dev' ] || refuse 'dev'
+              ;;
+            dev)
+              case "$HEAD" in
+                main | alpha) refuse 'a branch of your own' ;;
+              esac
+              ;;
+          esac
+
+          echo "$HEAD -> $BASE follows the chain."
