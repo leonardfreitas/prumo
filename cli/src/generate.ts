@@ -1,8 +1,9 @@
 import { spawnSync } from 'node:child_process'
+import { randomBytes } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { readdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { composeWorkspace, copyTemplate } from './compose.ts'
+import { type AppType, composeWorkspace, copyTemplate } from './compose.ts'
 import { type Answers, writeContext } from './context.ts'
 import { setJsonc } from './jsonc.ts'
 import { schemeFor } from './names.ts'
@@ -22,6 +23,29 @@ async function nameMobileApp(app: string, name: string): Promise<void> {
     result = setJsonc(result, ['expo', 'slug'], name)
     return setJsonc(result, ['expo', 'scheme'], schemeFor(name))
   })
+}
+
+const SECRET_LINE = /^BETTER_AUTH_SECRET=.*$/m
+
+// `.env` stays out of git, so the example is the committed truth and a fresh project gets a copy it can start with.
+// Only the secret differs: a sample value is public, so every generated API draws its own.
+async function writeLocalEnv(app: string, type: AppType): Promise<void> {
+  const example = join(app, '.env.example')
+
+  if (!existsSync(example)) {
+    return
+  }
+
+  let env = await readFile(example, 'utf8')
+
+  if (type === 'api') {
+    if (!SECRET_LINE.test(env)) {
+      throw new Error(`${example} no longer carries a BETTER_AUTH_SECRET line`)
+    }
+    env = env.replace(SECRET_LINE, `BETTER_AUTH_SECRET=${randomBytes(32).toString('base64url')}`)
+  }
+
+  await writeFile(join(app, '.env'), env)
 }
 
 function run(command: string, args: string[], cwd: string): void {
@@ -54,6 +78,7 @@ export async function generate({
   if (answers.architecture === 'alone' && only !== undefined) {
     await copyTemplate(join(templates, only), target)
     await nameProject(target, answers.name)
+    await writeLocalEnv(target, only)
 
     if (only === 'mobile') {
       await nameMobileApp(target, answers.name)
@@ -66,6 +91,10 @@ export async function generate({
       mobileScheme: schemeFor(answers.name),
     })
     await nameProject(target, answers.name)
+
+    for (const type of answers.types) {
+      await writeLocalEnv(join(target, 'apps', type), type)
+    }
 
     if (answers.types.includes('mobile')) {
       await nameMobileApp(join(target, 'apps', 'mobile'), answers.name)

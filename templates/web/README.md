@@ -8,9 +8,11 @@ Node 22.17 or later, pnpm, and the API running.
 
 ```sh
 pnpm install
-cp .env.example .env        # VITE_API_URL points at the API
 pnpm dev
 ```
+
+`.env` comes with the generated project, copied from `.env.example`; `VITE_API_URL` points at the API. It is not
+committed, so on a fresh clone run `cp .env.example .env`.
 
 The app runs on `http://localhost:5173`, which is the origin the API trusts by default (`WEB_ORIGIN`).
 

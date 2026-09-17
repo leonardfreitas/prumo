@@ -8767,3 +8767,32 @@ project. The failing-to-load half is stated with it, so that waiting never becom
 **What A costs:** one more rule in a document every mobile project loads.
 
 **Affects:** `mobile/routing.md`
+
+---
+
+## 2026-09-17: A generated project ships a local `.env`, copied from `.env.example`
+
+**Decision:** when the CLI generates a project, every app that has a `.env.example` (`api`, `web`, `mobile`) also
+gets a `.env` with the same content, so `pnpm dev` runs without a manual copy. The API's `BETTER_AUTH_SECRET` is
+replaced by 32 random bytes, base64url, drawn per project. `.env` stays in `.gitignore`, and the example stays the
+committed truth. `site` reads no environment variable, so it gets neither file.
+
+**Options considered:**
+- A) Write `.env` at generation, with a random secret for the API.
+- B) Write `.env` as a verbatim copy, sample secret included.
+- C) Keep `cp .env.example .env` as a manual first step in each README.
+
+**Reasoning:** A. The manual copy was the one step between generating and seeing the project run, and forgetting it
+fails the API at boot and the clients silently. A verbatim copy would pass validation with a secret that is public
+in this repository and in every generated project, and a development secret tends to outlive development. Drawing
+it costs nothing.
+
+**What A costs:** the README's first line no longer teaches the copy, so a fresh clone of a generated project has no
+`.env` and its developer must read the note that replaces it. The API's example now has two readers that depend on
+its `BETTER_AUTH_SECRET` line; generation fails loudly if the line disappears.
+
+**Amends:** "`.env` is ignored, `.env.example` is committed, production reads neither", which named
+`cp .env.example .env` as the first line of every README.
+
+**Affects:** `cli/src/generate.ts`, `templates/api/README.md`, `templates/web/README.md`,
+`templates/mobile/README.md`

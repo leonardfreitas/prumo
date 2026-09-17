@@ -8,11 +8,13 @@ Node 22.17 or later, pnpm, and Docker.
 
 ```sh
 pnpm install
-cp .env.example .env        # then replace BETTER_AUTH_SECRET with 32 or more random characters
 docker compose up -d --wait
 pnpm db:migrate
 pnpm dev
 ```
+
+`.env` comes with the generated project, copied from `.env.example` with a random `BETTER_AUTH_SECRET`. It is not
+committed, so on a fresh clone run `cp .env.example .env` and replace the secret with 32 or more random characters.
 
 The API listens on `http://localhost:3000`. Outside production, its documentation is at `/api/docs`.
 
