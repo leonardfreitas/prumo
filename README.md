@@ -117,8 +117,8 @@ Once written, those documents belong to the team. Prumo does not come back and r
 |---|---|
 | [`docs/stack.md`](https://github.com/stjosephworks/prumo/blob/main/docs/stack.md) | What is locked, what was deliberately dropped, and the version floors |
 | [`docs/structure.md`](https://github.com/stjosephworks/prumo/blob/main/docs/structure.md) | The `.prumo/` layout, and the rule deciding which areas a project receives |
-| [`docs/DECISIONS.md`](https://github.com/stjosephworks/prumo/blob/main/docs/DECISIONS.md) | Every decision, why it won, and what it costs |
-| [`docs/OPEN-QUESTIONS.md`](https://github.com/stjosephworks/prumo/blob/main/docs/OPEN-QUESTIONS.md) | What has been raised and is still unresolved |
+| [`docs/document-template.md`](https://github.com/stjosephworks/prumo/blob/main/docs/document-template.md) | The shape every convention document fills |
+| [`docs/maintaining-templates.md`](https://github.com/stjosephworks/prumo/blob/main/docs/maintaining-templates.md) | How a template is changed, and how the change is proved |
 
 ## Releasing
 
@@ -130,7 +130,6 @@ without a token in the repository. Any other push to `main` publishes nothing.
 
 Prumo is in beta. `0.0.1` is the first published version: every template runs and every generated
 project is verified in CI, and what a generated project looks like can still change before 1.0.
-What is known to be missing is listed in [`docs/OPEN-QUESTIONS.md`](https://github.com/stjosephworks/prumo/blob/main/docs/OPEN-QUESTIONS.md), and
-updating a project's `.prumo/` in place comes after 1.0.
+Updating a project's `.prumo/` in place comes after 1.0.
 
 MIT licensed. See [`LICENSE`](https://github.com/stjosephworks/prumo/blob/main/LICENSE).
