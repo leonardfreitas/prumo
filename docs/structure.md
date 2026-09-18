@@ -1,7 +1,6 @@
 # The `.prumo/` structure
 
-What a generated project receives, and how it is laid out. Settled in step 0.2 on 2026-09-10; every
-entry has a matching decision in [`DECISIONS.md`](DECISIONS.md).
+What a generated project receives, and how it is laid out. Settled in step 0.2 on 2026-09-10.
 
 This document describes **where files live and what they are called**. What goes *inside* a document
 (frontmatter, sections, `reviewed:`) is step 0.3 and is not decided here.
@@ -116,5 +115,3 @@ sooner or later. `INDEX.md` is the tool's territory; regenerating it is safe.
 | Question | Owner |
 |---|---|
 | What a document contains: frontmatter, sections, `reviewed:`, `applies-to:` | step 0.3 |
-
-Open questions are in [`OPEN-QUESTIONS.md`](OPEN-QUESTIONS.md).

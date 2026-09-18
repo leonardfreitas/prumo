@@ -105,7 +105,7 @@ Noticed something missing? Raise it as a question, never as a finished section.
 ```
 SUGGESTION: <what you noticed>
 Why it matters: <impact if we skip it>
-Open a decision now, or park it in docs/OPEN-QUESTIONS.md?
+Open a decision now, or leave it for later?
 ```
 
 ---
@@ -174,8 +174,8 @@ No generated skills, subagents or slash commands. Those change every quarter.
 ```
 CLAUDE.md          ← this file. The filename is what makes Claude Code load it
 README.md          ← the front page, copied into the package by the build
-docs/              ← Prumo's own documents, its decisions and its open questions.
-                     Index in docs/README.md
+docs/              ← Prumo's own documents: what is in force. Index in docs/README.md
+dev-logs/          ← history, kept for context. Nothing references it and nothing maintains it
 .prumo-templates/  ← the knowledge base. Copied into a project's .prumo/
 templates/         ← runnable skeletons, one per type
 cli/               ← the CLI, and the published npm package
@@ -195,8 +195,7 @@ that way.
 | Question | Lives in |
 |---|---|
 | What is locked | [`docs/stack.md`](docs/stack.md) |
-| Why it was decided, and what it cost | [`docs/DECISIONS.md`](docs/DECISIONS.md) |
-| What is still open | [`docs/OPEN-QUESTIONS.md`](docs/OPEN-QUESTIONS.md), the only home for an open question |
+| How the `.prumo/` knowledge base is maintained | [`docs/maintaining-templates.md`](docs/maintaining-templates.md) |
 | The `.prumo/` structure | [`docs/structure.md`](docs/structure.md) |
 | The document template | [`docs/document-template.md`](docs/document-template.md) |
 
@@ -217,10 +216,9 @@ that way.
 
 ## 11. Housekeeping
 
-- **`docs/DECISIONS.md`** holds one entry per approved decision: date, decision, options considered,
-  reasoning. Update it in the same turn the decision is made. Record what the choice **costs**, not
-  only why it won.
-- **`docs/OPEN-QUESTIONS.md`** holds anything raised but not resolved. Review it at the start of each session.
+- **`dev-logs/`** holds the architecture and stack phase as it was decided. It is history: read it to
+  understand why something is the way it is, never to learn what is in force, and do not append to it.
+  Where it disagrees with `docs/`, `docs/` is right.
 - **Commits** are English, imperative mood, one decision per commit where possible.
 - **Branches** follow one chain: a branch of your own → `dev` → `alpha` → `main`. Nobody pushes to those three,
   and a ruleset refuses it. `.github/workflows/flow.yml` refuses a pull request that skips a step.
@@ -229,8 +227,8 @@ that way.
 
 ## 12. Start here
 
-1. Read `docs/DECISIONS.md` and `docs/OPEN-QUESTIONS.md`
-2. Report what the repository holds today and what the open questions block
+1. Read `docs/README.md`, then `docs/stack.md` and `docs/structure.md`
+2. Report what the repository holds today
 3. Propose the next piece of work and its scope
 4. Wait for approval before asking the first decision question
 
