@@ -1,7 +1,6 @@
 # The document template
 
-The shape every document under `.prumo/` fills. Settled in step 0.3 on 2026-09-10; every entry has a
-matching decision in [`DECISIONS.md`](DECISIONS.md).
+The shape every document under `.prumo/` fills. Settled in step 0.3 on 2026-09-10.
 
 **One template, for everything.** There is no second shape. The consistency is the product: an
 assistant that can rely on the form stops spending attention on it.
